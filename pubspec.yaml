@@ -1,0 +1,59 @@
+name: tasknova_flutter
+description: "A new Flutter project."
+publish_to: 'none' # Keep this unless publishing to pub.dev
+
+version: 1.0.0+1
+
+environment:
+  # Make sure your Flutter SDK version matches or is compatible
+  # You can check your version by running 'flutter --version'
+  sdk: '>=3.3.0 <4.0.0' # Use a reasonable constraint based on your Flutter version
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+  http: ^1.2.1 # Consider updating http package if needed (check pub.dev)
+  google_mobile_ads: ^5.1.0 # Consider updating AdMob package if needed
+  speech_to_text: ^7.0.0 # Consider updating speech_to_text if needed
+  audioplayers: ^6.4.0
+  in_app_purchase: ^3.0.6
+  
+  # ..., http, google_mobile_ads, speech_to_text, audioplayers, etc.
+  flutter_tts: ^3.8.5 # <<< ADD THIS LINE
+
+  # ... other dependencies
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+    
+  # Keep only one flutter_lints entry - Use the higher version or match your project default
+  flutter_lints: ^5.0.0 # Or use ^3.0.0 depending on Flutter version, remove the duplicate
+  # Add the launcher icons package
+  flutter_launcher_icons: ^0.14.3 # Check for latest version on pub.dev
+
+
+
+flutter:
+  uses-material-design: true
+
+  # Define your asset folder so Flutter knows about it
+  # This is NEEDED if you refer to assets/icon/ in flutter_launcher_icons config
+  assets:
+     - assets/icon/
+     - assets/audio/ # Make sure Flutter recognizes this directory
+
+# -----------------------------------------------
+# Configuration for flutter_launcher_icons
+# Needs to be at the root level (no indentation)
+# -----------------------------------------------
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/icon/icon.png"
+  min_sdk_android: 21
+  # adaptive_icon_background: "#0D6EFD" # COMMENT OUT
+  # adaptive_icon_foreground: "assets/icon/icon_foreground.png" # COMMENT OUT
+  
