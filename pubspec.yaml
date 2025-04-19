@@ -19,6 +19,7 @@ dependencies:
   speech_to_text: ^7.0.0 # Consider updating speech_to_text if needed
   audioplayers: ^6.4.0
   in_app_purchase: ^3.0.6
+  intl: ^0.19.0
   
   # ..., http, google_mobile_ads, speech_to_text, audioplayers, etc.
   flutter_tts: ^3.8.5 # <<< ADD THIS LINE

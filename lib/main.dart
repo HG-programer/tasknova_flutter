@@ -1,33 +1,49 @@
-import 'package:flutter/material.dart';
-import 'package:audioplayers/audioplayers.dart'; // <-- Add Import
-import 'api_service.dart'; // Import the API service
-import 'task.dart'; // Import the Task model (using 'completed')
+// lib/main.dart
 import 'dart:async';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_tts/flutter_tts.dart';
-import 'category_selector.dart';
-import 'task_detail_dialog.dart';
+// Removed unused import for flutter_tts
 
-// --- Import AdMob & Speech Packages ---
+import 'package:audioplayers/audioplayers.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 import 'package:speech_to_text/speech_recognition_result.dart';
 
-// --- Main with AdMob Init ---
+// Import the separated files
+import 'task.dart';
+import 'api_service.dart';
+import 'task_detail_dialog.dart';
+import 'dialogs/motivation_dialog.dart'; // Needs public MotivationDialogContent
+import 'dialogs/ai_dialog.dart'; // Needs public AiDialogContent
+
+// --- Constants ---
+const Duration _kShortDuration = Duration(milliseconds: 200);
+const Duration _kMediumDuration = Duration(milliseconds: 350);
+const Duration _kLongDuration = Duration(milliseconds: 400);
+const double _kIconSizeSmall = 18.0;
+const double _kIconSizeMedium = 22.0;
+const double _kIconSizeLarge = 32.0;
+const EdgeInsets _kInputRowPadding = EdgeInsets.fromLTRB(16, 16, 16, 8);
+const EdgeInsets _kListItemPadding =
+    EdgeInsets.symmetric(horizontal: 12.0, vertical: 5.0);
+const EdgeInsets _kErrorPadding = EdgeInsets.all(24);
+const EdgeInsets _kEmptyListPadding = EdgeInsets.all(32.0);
+
+//==============================================================================
+// Main Application Entry Point & Theme Setup
+//==============================================================================
 Future<void> main() async {
-  // MUST ensure bindings are ready before initializing plugins
   WidgetsFlutterBinding.ensureInitialized();
   try {
-    // Initialize AdMob SDK
+    // Consider deferring AdMob initialization if it causes startup lag
     await MobileAds.instance.initialize();
-    print("AdMob SDK Initialized Successfully");
   } catch (e) {
-    print("Error initializing AdMob SDK: $e");
+    debugPrint("Error initializing AdMob SDK: $e");
   }
-  runApp(const MyApp()); // Run the Flutter App
+  runApp(const MyApp());
 }
 
-// --- MyApp (Theme Management) ---
+// --- Main Application Widget ---
 class MyApp extends StatefulWidget {
   const MyApp({super.key});
   @override
@@ -35,485 +51,608 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
-  bool _isDarkMode = false; // State for theme mode
+  bool _isDarkMode = false;
   void _toggleTheme() {
-    // No async needed
     setState(() {
       _isDarkMode = !_isDarkMode;
-      HapticFeedback.mediumImpact(); // <-- ADD MEDIUM HAPTIC FEEDBACK HERE
+      HapticFeedback.mediumImpact();
     });
   }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      debugShowCheckedModeBanner: false, // Hide debug banner
+      debugShowCheckedModeBanner: false,
       title: 'TaskNova',
-      theme: _buildTheme(Brightness.light), // Light theme
-      darkTheme: _buildTheme(Brightness.dark), // Dark theme
-      themeMode:
-          _isDarkMode ? ThemeMode.dark : ThemeMode.light, // Control theme mode
+      theme: _buildTheme(Brightness.light),
+      darkTheme: _buildTheme(Brightness.dark),
+      themeMode: _isDarkMode ? ThemeMode.dark : ThemeMode.light,
       home: TaskNovaHomePage(
         isDarkMode: _isDarkMode,
         onThemeChanged: _toggleTheme,
-      ), // Pass state & function
+      ),
     );
   }
 
-  // Helper function to build themes consistently
   ThemeData _buildTheme(Brightness brightness) {
-    final Color surfaceColor =
-        brightness == Brightness.dark ? const Color(0xFF121212) : Colors.white;
-    final Color onSurfaceColor =
-        brightness == Brightness.dark ? Colors.white : Colors.black87;
-    final Color primaryColor = brightness == Brightness.dark
-        ? Colors.blueGrey[700]!
-        : const Color(0xFF0d6efd);
+    final bool isDark = brightness == Brightness.dark;
+    final Color surfaceColor = isDark ? const Color(0xFF121212) : Colors.white;
+    final Color onSurfaceColor = isDark ? Colors.white : Colors.black87;
+    final Color primaryColor =
+        isDark ? Colors.blueGrey[700]! : const Color(0xFF0d6efd);
+    final Color primaryContainerColor =
+        isDark ? Colors.blueGrey[800]! : Colors.blue[100]!;
+    final Color onPrimaryContainerColor =
+        isDark ? Colors.blue[100]! : Colors.blue[900]!;
+    final Color surfaceContainerHighestColor =
+        isDark ? Colors.grey[850]! : Colors.grey[300]!;
+    final Color errorColor = isDark ? Colors.redAccent[200]! : Colors.red[700]!;
+    final Color outlineColor = isDark ? Colors.grey[600]! : Colors.grey[400]!;
+    final Color hintColor = isDark ? Colors.grey[500]! : Colors.grey[600]!;
+    final Color disabledColor = isDark ? Colors.grey[600]! : Colors.grey[500]!;
+    final Color dividerColor = isDark ? Colors.grey[700]! : Colors.grey[300]!;
+    final Color chipBackgroundColor =
+        isDark ? Colors.grey[700]! : Colors.grey[200]!;
+    final Color chipSelectedColor =
+        primaryColor.withAlpha((0.85 * 255).round());
+    final Color iconColor = isDark ? Colors.white70 : Colors.black54;
 
     return ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF0d6efd), // Base seed color
-          brightness: brightness,
-          surface: surfaceColor,
-          onSurface: onSurfaceColor,
-          primary: primaryColor, // Explicitly set primary if needed elsewhere
-          error: brightness == Brightness.dark
-              ? Colors.redAccent[200]
-              : Colors.red[700], // Define error color
-          primaryContainer: brightness == Brightness.dark
-              ? Colors.blueGrey[800]
-              : Colors.blue[100], // For styled boxes
-        ),
-        useMaterial3: true, // Use Material 3 design features
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: primaryColor,
         brightness: brightness,
-        // Consistent AppBar Theme
-        appBarTheme: AppBarTheme(
+        surface: surfaceColor,
+        onSurface: onSurfaceColor,
+        primary: primaryColor,
+        error: errorColor,
+        primaryContainer: primaryContainerColor,
+        onPrimaryContainer: onPrimaryContainerColor,
+        surfaceContainerHighest: surfaceContainerHighestColor,
+      ).copyWith(
+        surfaceTint: Colors.transparent,
+        outline: outlineColor,
+      ),
+      useMaterial3: true,
+      brightness: brightness,
+      scaffoldBackgroundColor: surfaceColor,
+      appBarTheme: AppBarTheme(
+        backgroundColor: primaryColor,
+        foregroundColor: Colors.white,
+        elevation: 1.0,
+        centerTitle: true,
+      ),
+      cardTheme: CardTheme(
+        elevation: 1.0,
+        color: isDark ? Colors.grey[850] : Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12.0),
+        ),
+        margin: EdgeInsets.zero,
+      ),
+      dialogTheme: DialogTheme(
+        backgroundColor: isDark ? const Color(0xFF1e1e1e) : Colors.white,
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(16.0)),
+        titleTextStyle: TextStyle(
+          color: onSurfaceColor,
+          fontSize: 20.0,
+          fontWeight: FontWeight.w600,
+        ),
+        contentTextStyle: TextStyle(
+          color: onSurfaceColor
+              .withAlpha((0.85 * 255).round()), // Correct alpha use
+          fontSize: 15.0,
+          height: 1.4,
+        ),
+      ),
+      chipTheme: ChipThemeData(
+        backgroundColor: chipBackgroundColor, // Guaranteed non-null
+        selectedColor: chipSelectedColor,
+        labelStyle: TextStyle(
+          // Guaranteed non-null style provided
+          color: isDark ? Colors.white70 : Colors.black87,
+          fontSize: 12,
+        ),
+        secondaryLabelStyle: const TextStyle(
+          color: Colors.white,
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        side: BorderSide.none,
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(foregroundColor: primaryColor),
+      ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
           backgroundColor: primaryColor,
           foregroundColor: Colors.white,
-        ),
-        // Optional default styling for widgets
-        elevatedButtonTheme: ElevatedButtonThemeData(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: primaryColor,
-            foregroundColor: Colors.white,
-            padding:
-                const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8.0),
-            ),
-          ),
-        ),
-        // Define Icon Theme defaults if needed
-        iconTheme: IconThemeData(
-            color: brightness == Brightness.dark
-                ? Colors.white70
-                : Colors.black54),
-        // Consistent icon button style
-        iconButtonTheme: IconButtonThemeData(
-          style: IconButton.styleFrom(
-            // Keep primary color for key action buttons like Add/Mic if desired, but others might use default iconTheme
-            // foregroundColor: primaryColor, // Removing this lets IconButton use IconTheme color by default
-            padding: const EdgeInsets.all(8),
-          ),
-        ),
-        // Dialog Theme (optional: sets defaults for AlertDialog)
-        dialogTheme: DialogTheme(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
           shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(
-                  16.0) // Default rounded shape for all dialogs
-              ),
-          titleTextStyle: TextStyle(
-            // Default title style
-            color: onSurfaceColor,
-            fontSize:
-                20.0, // or use Theme.of(context).textTheme.titleLarge?.fontSize
-            fontWeight: FontWeight.w600,
+            borderRadius: BorderRadius.circular(8.0),
           ),
         ),
-        // Text Button Theme
-        textButtonTheme: TextButtonThemeData(
-          style: TextButton.styleFrom(
-            foregroundColor: primaryColor, // Use primary color for text buttons
-          ),
-        ));
+      ),
+      iconTheme: IconThemeData(
+        // Guaranteed non-null color provided
+        color: iconColor,
+        size: _kIconSizeMedium,
+      ),
+      iconButtonTheme: IconButtonThemeData(
+        style: IconButton.styleFrom(padding: const EdgeInsets.all(8)),
+      ),
+      dividerTheme: DividerThemeData(color: dividerColor, thickness: 1),
+      hintColor: hintColor,
+      disabledColor: disabledColor,
+      inputDecorationTheme: InputDecorationTheme(
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: outlineColor, width: 1.0),
+        ),
+        enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide(color: outlineColor, width: 1.0)),
+        focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide(color: primaryColor, width: 1.5)),
+        labelStyle:
+            TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[700]),
+        hintStyle: TextStyle(color: hintColor),
+        isDense: true,
+      ),
+      progressIndicatorTheme: ProgressIndicatorThemeData(
+        color: primaryColor,
+        linearTrackColor: surfaceContainerHighestColor,
+        circularTrackColor: surfaceContainerHighestColor,
+      ),
+      snackBarTheme: SnackBarThemeData(
+        behavior: SnackBarBehavior.floating,
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(10.0)),
+        actionTextColor: isDark ? Colors.lightBlue[200] : Colors.lightBlue[100],
+        elevation: 4.0,
+      ),
+    );
   }
 }
 
-// --- TaskNovaHomePage StatefulWidget ---
+//==============================================================================
+// Home Page Widget
+//==============================================================================
 class TaskNovaHomePage extends StatefulWidget {
   final bool isDarkMode;
-  final VoidCallback onThemeChanged; // Receive theme state and callback
+  final VoidCallback onThemeChanged;
   const TaskNovaHomePage({
     super.key,
     required this.isDarkMode,
     required this.onThemeChanged,
   });
+
   @override
   State<TaskNovaHomePage> createState() => _TaskNovaHomePageState();
 }
 
-// --- State class for TaskNovaHomePage ---
 class _TaskNovaHomePageState extends State<TaskNovaHomePage> {
-  // State Variables
-  List<String> _categories = ['default']; // Default category list
-  String _selectedCategory = 'default'; // Currently selected filter category
-  bool _loadingCategories = true; // Track category loading state
-  List<Task> _tasks = []; // Holds the list of tasks
-  bool _isLoading = true; // Track initial loading state
-  String? _errorMessage; // Store potential error messages
-  final TextEditingController _taskInputController =
-      TextEditingController(); // For text input
-  final ApiService _apiService = ApiService(); // Service for API calls
-
+  // --- State ---
+  List<Task> _tasks = [];
+  bool _isLoading = true;
+  String? _errorMessage;
+  final TextEditingController _taskInputController = TextEditingController();
+  final ApiService _apiService = ApiService();
   final GlobalKey<AnimatedListState> _listKey = GlobalKey<AnimatedListState>();
 
   // AdMob State
-  BannerAd? _bannerAd; // The banner ad object
-  bool _isBannerAdLoaded = false; // Track if the banner ad has loaded
+  BannerAd? _bannerAd;
+  bool _isBannerAdLoaded = false;
   final String _bannerAdUnitId =
-      "ca-app-pub-3940256099942544/6300978111"; // TEST BANNER ID
+      "ca-app-pub-3940256099942544/6300978111"; // Test Ad ID
 
   // Speech Recognition State
-  final SpeechToText _speechToText =
-      SpeechToText(); // Speech recognizer instance
-  bool _isSpeechEnabled = false; // Is speech available on device?
-  bool _isListening = false; // Is the app currently listening?
-  String _lastWords = ''; // Last recognized phrase buffer
+  final SpeechToText _speechToText = SpeechToText();
+  bool _isSpeechEnabled = false;
+  bool _isListening = false;
+  // String _lastWords = ''; // REMOVED - Unused field
 
+  // Audio Player State
   final AudioPlayer _audioPlayer = AudioPlayer();
 
   // --- Lifecycle Methods ---
   @override
   void initState() {
     super.initState();
-    _loadTasks(); // Fetch tasks when screen loads
-    _loadBannerAd(); // Attempt to load the ad banner
+    // Initial load sequence
+    _loadInitialData(); // Start fetching tasks
+    _loadBannerAd(); // Start loading banner ad
     _initSpeech(); // Initialize speech recognition
-    _loadCategories();
+
+    // Consider moving _initSpeech if it's heavy and not immediately needed
+    // e.g., initialize only when the mic button is first pressed
+
+    _speechToText.statusListener = _speechStatusListener;
   }
 
   @override
   void dispose() {
     _taskInputController.dispose();
     _bannerAd?.dispose();
-    _speechToText.cancel();
+    // Safely stop speech if listening
+    if (_isListening) {
+      _speechToText.stop().catchError(
+          (e) => debugPrint("Error stopping speech on dispose: $e"));
+    }
+    _speechToText.cancel().catchError((e) => debugPrint(
+        "Error cancelling speech on dispose: $e")); // Good practice to cancel too
     _audioPlayer.dispose();
     super.dispose();
   }
 
-  // --- AdMob Banner Loading ---
-  void _loadBannerAd() {
-    _bannerAd = BannerAd(
-      adUnitId: _bannerAdUnitId,
-      request: const AdRequest(), // Standard ad request
-      size: AdSize.banner, // Standard banner size
-      listener: BannerAdListener(
-        onAdLoaded: (ad) {
-          if (mounted) setState(() => _isBannerAdLoaded = true);
-          print('$ad loaded.');
-        },
-        onAdFailedToLoad: (ad, err) {
-          ad.dispose();
-          print('Banner Ad failed to load: $err');
-          if (mounted) setState(() => _isBannerAdLoaded = false);
-        },
-      ),
-    )..load();
-    print("Attempting to load banner ad...");
-  }
-
-  // --- Load Tasks from API (with Pull-to-Refresh support) ---
-  Future<void> _loadTasks() async {
+  // --- Data Loading ---
+  Future<void> _loadInitialData() async {
     if (!mounted) return;
-    final bool isRefreshing = !_isLoading;
-    if (!isRefreshing) {
-      setState(() => _isLoading = true);
-    }
-    setState(() => _errorMessage = null);
-
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
     try {
       final tasks = await _apiService.fetchTasks();
-      if (mounted) setState(() => _tasks = tasks);
+      if (!mounted) return; // Check again after async gap
+      setState(() {
+        _tasks = tasks;
+        _isLoading = false;
+      });
     } catch (e) {
-      if (mounted) {
-        setState(() => _errorMessage =
-            "Load tasks failed: ${e.toString().replaceFirst('Exception: ', '')}");
-      }
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
+      debugPrint("Load failed: ${e.toString()}"); // Log for debugging
+      if (!mounted) return; // Check again
+      setState(() {
+        _errorMessage =
+            "Load failed. Please check connection."; // User-friendly message
+        _isLoading = false;
+      });
     }
   }
 
-  // --- Add Task via API (FOR ANIMATED LIST - FIXED with setState) ---
-// Inside class _TaskNovaHomePageState { ... }
+  // Helper to prepare categories.
+  List<String> _prepareCategories(List<String> cats) {
+    final Set<String> uniqueCats = {
+      'default',
+      ...cats
+    }; // Ensure 'default' exists and handle duplicates
+    final List<String> sortedCats = uniqueCats.toList();
+    sortedCats.sort((a, b) {
+      if (a == 'default') return -1;
+      if (b == 'default') return 1;
+      return a.compareTo(b);
+    });
+    return sortedCats;
+  }
 
-// === REPLACE OLD _addTask WITH THIS VERSION ===
-  Future<void> _addTask({String? content, String? category}) async {
+  // --- Ad Loading ---
+  void _loadBannerAd() {
+    // Ensure previous ad is disposed if any
+    _bannerAd?.dispose();
+    _bannerAd = null;
+    if (mounted) {
+      setState(() => _isBannerAdLoaded = false); // Reset loading state
+    } else {
+      return; // Don't proceed if not mounted
+    }
+
+    _bannerAd = BannerAd(
+      adUnitId: _bannerAdUnitId,
+      request: const AdRequest(),
+      size: AdSize.banner,
+      listener: BannerAdListener(
+        onAdLoaded: (ad) {
+          debugPrint('Banner Ad loaded.');
+          if (mounted) {
+            setState(() {
+              // Keep the current ad instance
+              _bannerAd = ad as BannerAd;
+              _isBannerAdLoaded = true;
+            });
+          } else {
+            // Widget was disposed before ad loaded
+            ad.dispose();
+          }
+        },
+        onAdFailedToLoad: (ad, err) {
+          debugPrint('Banner Ad load failed: $err');
+          ad.dispose(); // Dispose the failed ad
+          if (mounted) {
+            setState(() => _isBannerAdLoaded = false);
+          }
+        },
+        // Add other listeners if needed (onAdOpened, onAdClosed, etc.)
+      ),
+    )..load(); // Start loading
+  }
+
+  // --- Task List Refresh ---
+  Future<void> _loadTasks() async {
+    if (!mounted) return;
+    // Consider showing visual feedback during refresh, though RefreshIndicator does this
+    setState(() => _errorMessage = null); // Clear previous errors
+    try {
+      final tasks = await _apiService.fetchTasks();
+      if (mounted) {
+        // Animate list changes might be complex here, simple setState is usually sufficient for refresh
+        setState(() => _tasks = tasks);
+      }
+    } catch (e) {
+      debugPrint("Refresh failed: $e");
+      if (mounted) {
+        _showErrorSnackbar("Refresh failed", e);
+      }
+    }
+  }
+
+  // --- CRUD Operations ---
+  Future<void> _addTask(
+      {String? content, String? category, int? parentId}) async {
     final String taskContent = content ?? _taskInputController.text.trim();
-    // Use the currently selected category if none is passed explicitly
-    final String taskCategory = category ?? _selectedCategory;
+    final String taskCategory = category ?? 'default';
 
     if (taskContent.isEmpty || !mounted) return;
-    FocusScope.of(context).unfocus();
-    print(
-        "Attempting to add task: '$taskContent' in category: '$taskCategory'"); // Debug log
+
+    FocusScope.of(context).unfocus(); // Dismiss keyboard
+
+    // Optional: Show a temporary loading indicator if add takes time
+    // setState(() => _isAddingTask = true);
 
     try {
-      // Pass category to the ApiService method
       final newTask = await _apiService.addTask(taskContent,
-          category: taskCategory // Send category to API
-          );
-      print("API success. New Task ID: ${newTask.id}");
+          category: taskCategory, parentId: parentId);
 
       if (mounted) {
-        setState(() {
-          final insertIndex = _tasks.length;
-          print(
-              "Updating UI: Inserting '${newTask.content}' at index $insertIndex");
-          _tasks.insert(insertIndex, newTask);
-          _listKey.currentState?.insertItem(insertIndex,
-              duration: const Duration(milliseconds: 400));
-        });
+        // Only animate insertion for top-level tasks in this list view
+        if (newTask.parentId == null) {
+          // Update state first
+          _tasks.insert(0, newTask);
+          // Then tell AnimatedList (using the updated list length implicitly)
+          _listKey.currentState?.insertItem(0, duration: _kLongDuration);
+          // If _tasks was already passed to AnimatedList constructor, insertItem is enough
+          // No need for setState wrapping _tasks.insert IF list passed by reference correctly
 
-        if (content == null) {
-          // Only clear text field if not added via speech
-          _taskInputController.clear();
+          // Ensure list view scrolls to the top? (Optional)
+          // Consider _scrollController.animateTo(0, ...)
         }
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('Task added!'), backgroundColor: Colors.green));
-      } else {
-        print("Widget unmounted after API call, task add aborted.");
+
+        // Clear input only if it wasn't speech input
+        if (content == null) {
+          _taskInputController.clear();
+          // Reset button state if input clearing affects it (already handled by onChanged)
+          if (mounted) {
+            setState(() {});
+          }
+        }
+        _showSuccessSnackbar('Task added!');
+        HapticFeedback.lightImpact();
+        _playSuccessSound();
       }
     } catch (e) {
+      debugPrint("Add failed: $e");
       if (mounted) {
-        print("Error adding task: $e");
         _showErrorSnackbar("Add failed", e);
       }
+    } finally {
+      // if (mounted) setState(() => _isAddingTask = false);
     }
   }
-// ===========================================
-
-  // --- Toggle Task Completion (uses 'completed') ---
-
-// ... other code ...
-
-// Inside class _TaskNovaHomePageState extends State<TaskNovaHomePage>
 
   Future<void> _toggleTaskCompletion(Task task) async {
     if (!mounted) return;
-    final originalState = task.completed;
+    final int taskIndex = _tasks.indexWhere((t) => t.id == task.id);
+    if (taskIndex == -1) return; // Task not found in the current list
 
-    // Optimistic UI update and haptic feedback
+    final originalState = _tasks[taskIndex].completed;
+
+    // Optimistic UI Update
     setState(() {
-      task.completed = !originalState; // Update the task's completed state
-      HapticFeedback.lightImpact(); // <-- Trigger light vibration
+      // Mutate the task object directly within the list for visual change
+      _tasks[taskIndex].completed = !originalState;
+      // This relies on AnimatedDefaultTextStyle inside buildAnimatedTaskItem
+      // and potentially updates to subtask progress if logic is tied here.
     });
+    HapticFeedback.lightImpact(); // Provide feedback immediately
 
-    // Attempt to sync with backend
     try {
-      final confirmedState = await _apiService.updateTaskCompletion(
-        task.id,
-        !originalState, // Send the *new* intended state to the backend
-      );
-      // If backend confirmation differs from our optimistic update, revert UI
-      if (mounted && confirmedState != task.completed) {
-        // print("Backend confirmation mismatch! Reverting toggle.");
-        setState(() {
-          task.completed = confirmedState; // Use the state confirmed by backend
-        });
-      } else if (mounted) {
-        // print("Task ${task.id} toggle synced with backend.");
-      }
+      // Make API call
+      await _apiService.updateTaskCompletion(task.id, !originalState);
+      // Optional: Refresh subtask counts/progress if API returns updated Task?
     } catch (e) {
-      // If API call fails, roll back the optimistic UI update
+      debugPrint("Update completion failed: $e");
       if (mounted) {
+        // Revert UI if API call failed
         setState(() {
-          task.completed = originalState; // Revert to the original state
+          _tasks[taskIndex].completed = originalState;
         });
         _showErrorSnackbar("Update failed", e);
       }
     }
   }
 
-// ... rest of your _TaskNovaHomePageState class ...
-
-  // --- Delete Task (FOR ANIMATED LIST, void return API) ---
-// Inside class _TaskNovaHomePageState extends State<TaskNovaHomePage>
-
   Future<void> _deleteTask(int taskId, int index) async {
-    // Basic checks
-    if (!mounted || index < 0 || index >= _tasks.length) return;
+    if (!mounted ||
+        index < 0 ||
+        index >= _tasks.length ||
+        _tasks[index].id != taskId) {
+      debugPrint(
+          "Delete precondition failed: index=$index, length=${_tasks.length}, taskId=$taskId");
+      return; // Precondition failed
+    }
 
-    // Store the task data before removing it
-    final taskToDelete = _tasks[index];
+    // 1. Get the task to remove for the animation and potential rollback
+    final Task taskToDelete = _tasks[index]; // Keep reference for builder
 
-    // --- Initiate Removal Animation & Haptic Feedback ---
+    // 2. Update the state list *first*
+    _tasks.removeAt(index);
+
+    // 3. Tell AnimatedList to remove the item visually
     _listKey.currentState?.removeItem(
-        index,
-        // Builder for the item during removal animation
-        (context, animation) => _buildRemovedTaskItem(taskToDelete, animation),
-        duration: const Duration(milliseconds: 300));
-    HapticFeedback.lightImpact(); // <-- ADD HAPTIC FEEDBACK HERE
+      index, // Index from which item was removed
+      (context, animation) => _buildRemovedTaskItem(
+          taskToDelete, animation), // Builder for outgoing animation
+      duration: _kMediumDuration,
+    );
 
-    // Optimistically remove the task data from the local list
-    // Should happen AFTER starting the animation to allow _buildRemovedTaskItem to access data
-    // Consider wrapping in setState if other parts of UI depend on _tasks.length immediately
-    setState(() {
-      _tasks.removeAt(index);
-    });
+    HapticFeedback.lightImpact();
+    _showSuccessSnackbar('Task "${taskToDelete.content}" deleted.',
+        isDelete: true); // Show confirmation early
 
-    // Show confirmation SnackBar
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Task "${taskToDelete.content}" deleted.'),
-        backgroundColor: Colors.green));
-
-    // Attempt to delete from backend
+    // 4. Call the API
     try {
       await _apiService.deleteTask(taskId);
-      // print("Task ${taskToDelete.id} deleted from backend.");
+      // Success, nothing more to do visually
     } catch (e) {
-      // print("Backend delete failed: $e");
-      // Handle backend failure: Re-insert the item visually
+      debugPrint("Delete API failed: $e");
       if (mounted) {
-        // Calculate correct insertion index (in case other items were added/removed)
-        final insertIndex = index < _tasks.length ? index : _tasks.length;
-        // Put data back into the list
-        setState(() {
-          _tasks.insert(insertIndex, taskToDelete);
-        });
-        // Insert back into AnimatedList (may cause flicker)
-        _listKey.currentState?.insertItem(insertIndex, duration: Duration.zero);
-
-        _showErrorSnackbar("Delete failed on backend", e);
-
-        // Reloading the whole list might be simpler but less ideal UX on error
-        // _loadTasks();
+        // 5. Rollback UI on API error
+        // Insert the original task data back into the list state
+        _tasks.insert(index, taskToDelete);
+        // Tell AnimatedList to insert it back *without* animation
+        _listKey.currentState?.insertItem(index, duration: Duration.zero);
+        _showErrorSnackbar("Delete failed", e);
       }
     }
   }
 
-// ... rest of your _TaskNovaHomePageState class ...
-
-  // === ADD THIS METHOD ===
-  void _openTaskDetailDialog(Task task) {
-    print("Opening detail dialog for task ID: ${task.id}"); // Debug print
-    showAnimatedDialog(
-      // Use the helper if you have it, otherwise showDialog
-      context: context,
-      builder: (dialogContext) => TaskDetailDialog(
-        task: task, // Pass the specific task
-        apiService: _apiService, // Pass the ApiService instance
-        categories: _categories, // Pass the list of available categories
-        onTaskUpdated: (updatedTask) {
-          // This callback gets called from INSIDE the dialog
-          // when a subtask/category/content is changed there.
-          print(
-              "Task updated callback received for task ID: ${updatedTask.id}");
-          if (mounted) {
-            // Just trigger a rebuild of the main list to reflect
-            // any direct mutations made to the task object.
-            setState(() {});
-            // More sophisticated state management might replace
-            // the item in the _tasks list instead.
-          }
-        },
-      ),
-    );
-  }
-
-  // =====================
-  // --- Helper to Build Removed Task Item for AnimatedList ---
   Widget _buildRemovedTaskItem(Task task, Animation<double> animation) {
     final theme = Theme.of(context);
-    final textStyleComplete = theme.textTheme.titleMedium?.copyWith(
+    // Use slightly faded text style
+    final textStyleFaded =
+        (theme.textTheme.titleMedium ?? const TextStyle()).copyWith(
       decoration: TextDecoration.lineThrough,
-      color: theme.textTheme.titleMedium?.color?.withOpacity(0.6),
-      decorationColor: theme.textTheme.titleMedium?.color?.withOpacity(0.7),
-      decorationThickness: 1.5,
+      color: theme.disabledColor.withAlpha((255 * 0.7).round()), // Use alpha
     );
-
     return SizeTransition(
-      sizeFactor: animation,
+      sizeFactor: CurvedAnimation(
+          // Apply curve to size transition too
+          parent: animation,
+          curve: Curves.easeOutCubic),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 6.0),
-        child: Container(
-          decoration: BoxDecoration(
-            color: theme.cardColor.withOpacity(0.5), // Faded background
-            borderRadius: BorderRadius.circular(12.0),
-          ),
+        padding: _kListItemPadding,
+        child: Card(
+          // Fade the card background as it animates out
+          color: theme.cardTheme.color
+              ?.withAlpha((255 * 0.6).round()), // Use alpha
+          elevation: 0, // Reduce elevation during removal
           child: ListTile(
             dense: true,
+            visualDensity: VisualDensity.compact,
             leading: Checkbox(
-                value: task.completed, onChanged: null), // Static checkbox
+              value: task.completed,
+              onChanged: null, // Non-interactive during removal
+              // Consider styling disabled checkbox
+              side: BorderSide(color: theme.disabledColor),
+              checkColor: theme.scaffoldBackgroundColor,
+              activeColor: theme.disabledColor
+                  .withAlpha((255 * 0.5).round()), // Use alpha
+            ),
             title: Text(
               task.content,
-              style: textStyleComplete, // Use faded style
-              maxLines: 2,
+              style: textStyleFaded,
+              maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
-            trailing: const SizedBox(width: 80), // Placeholder width
+            trailing: const SizedBox(width: 90), // Keep layout consistent
           ),
         ),
       ),
     );
   }
 
-  // --- Speech Recognition Methods ---
+  // --- Speech Recognition ---
   void _initSpeech() async {
+    bool available = false;
     try {
-      bool available = await _speechToText.initialize(
-        onError: (e) => print('Speech Init Err: $e'),
-        onStatus: _speechStatusListener,
-      );
-      if (mounted) setState(() => _isSpeechEnabled = available);
-      print("Speech recognition available: $available");
-    } catch (e) {
-      print("Could not initialize speech recognition: $e");
-      if (mounted) setState(() => _isSpeechEnabled = false);
-    }
-  }
-
-  void _speechStatusListener(String status) {
-    final bool currentlyListening = _speechToText.isListening;
-    if (mounted && currentlyListening != _isListening) {
-      setState(() => _isListening = currentlyListening);
-      print("Speech status changed: $status - Listening: $_isListening");
-      if (!_isListening && _lastWords.isNotEmpty) {
-        print(
-            "Adding task from speech status change (stop/pause/error): $_lastWords");
-        Future.delayed(const Duration(milliseconds: 100), () {
-          if (mounted && _lastWords.isNotEmpty) {
-            // Check mounted again
-            _addTaskFromSpeech(_lastWords);
+      available = await _speechToText.initialize(
+        onError: (errorNotification) {
+          debugPrint('Speech Init Error: $errorNotification');
+          // Show user feedback?
+          if (mounted) {
+            setState(() => _isSpeechEnabled = false);
+            // Maybe show a snackbar "Speech recognition unavailable"
           }
-        });
-      } else if (!_isListening) {
-        _resetInputHint();
+        },
+        // onStatus: (status) => print('Speech Status: $status'), // Already handled by listener
+        // debugLog: false, // REMOVED - Undefined parameter
+      );
+    } catch (e) {
+      debugPrint("Could not initialize speech recognition: $e");
+      available = false; // Ensure it's false on exception
+    } finally {
+      if (mounted) {
+        setState(() => _isSpeechEnabled = available);
+        if (!available) {
+          // Consider informing user speech isn't available permanently (if needed)
+        }
       }
     }
   }
 
+  void _speechStatusListener(String status) {
+    debugPrint("Speech Status: $status");
+    // Update listening state based on the speech engine's status
+    if (mounted) {
+      final isCurrentlyListening = _speechToText.isListening;
+      // Check if state needs updating to avoid unnecessary rebuilds
+      if (_isListening != isCurrentlyListening) {
+        setState(() {
+          _isListening = isCurrentlyListening;
+        });
+      }
+      // Update the text field hint *after* state update
+      // Moved _resetInputHint call here to ensure it runs *after* setState
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _resetInputHint();
+      });
+    }
+  }
+
   void _startListening() async {
-    if (!_isSpeechEnabled) {
-      _showErrorSnackbar("Speech", "Not available");
+    if (!_isSpeechEnabled || !mounted) {
+      _showErrorSnackbar("Speech not enabled",
+          "Please grant permission or check device settings.");
       return;
     }
-    if (_isListening || !mounted) return;
-    _lastWords = "";
-    if (mounted) setState(() => _isListening = true);
-    _taskInputController.clear();
+    if (_isListening) {
+      debugPrint("Already listening, ignoring start request.");
+      return; // Already listening
+    }
+
+    // _lastWords = ""; // REMOVED - Field unused
+
+    // Update state *before* starting listen to change UI immediately
+    setState(() => _isListening = true);
+    _taskInputController.clear(); // Clear text field
+    _resetInputHint(); // Update hint immediately
+
     try {
       await _speechToText.listen(
         onResult: _onSpeechResult,
-        localeId: "en_US",
-        listenFor: const Duration(seconds: 20),
-        pauseFor: const Duration(seconds: 5),
-        partialResults: true,
+        localeId: "en_US", // Consider making this configurable?
+        listenFor: const Duration(seconds: 30), // Max listen duration
+        pauseFor:
+            const Duration(seconds: 3), // Duration of silence before stopping
+        listenOptions: SpeechListenOptions(
+          partialResults: true, // Show words as they are recognized
+          cancelOnError: true, // Stop listening on error
+          listenMode: ListenMode
+              .confirmation, // Wait for confirmation (may vary by platform)
+          // Other options like sampleRate, autoPunctuation might be available
+        ),
       );
     } catch (e) {
-      print("Error starting listening: $e");
+      debugPrint("Speech listen error: $e");
       if (mounted) {
         _showErrorSnackbar("Speech start error", e);
+        // Ensure state is reverted if listen fails to start
         setState(() => _isListening = false);
         _resetInputHint();
       }
@@ -521,185 +660,251 @@ class _TaskNovaHomePageState extends State<TaskNovaHomePage> {
   }
 
   void _stopListening() async {
-    if (!_isListening || !mounted) return; // Added mounted check
-    await _speechToText.stop();
-    print("Manual stop listening requested.");
-    _resetInputHint();
-  }
-
-  void _onSpeechResult(SpeechRecognitionResult result) {
-    if (!mounted) return;
-    final recognized = result.recognizedWords;
-    setState(() {
-      _lastWords = recognized;
-      _taskInputController.text = _lastWords;
-      _taskInputController.selection = TextSelection.fromPosition(
-        TextPosition(offset: _taskInputController.text.length),
-      );
-    });
-    print("Recognized words: '$recognized' | Final: ${result.finalResult}");
-    if (result.finalResult && recognized.isNotEmpty) {
-      print("Processing final speech result.");
-      _addTaskFromSpeech(recognized);
-    }
-  }
-
-// Inside class _TaskNovaHomePageState extends State<TaskNovaHomePage>
-
-  void _addTaskFromSpeech(String content) async {
-    // Basic checks
-    if (!mounted || content.isEmpty) return;
-
-    final String taskContentForAudio =
-        content; // Keep content for audio if needed later
-    // print("Adding task from speech content: $content"); // Optional logging
-
-    // Clear speech buffer and text field immediately
-    if (mounted) setState(() => _lastWords = '');
-    _resetInputHint();
-
-    // --- Attempt to add the task via API ---
-    // Wrap _addTask in its own try-catch to differentiate add errors from audio errors
-    bool addTaskSucceeded = false;
+    if (!_isListening || !mounted) return;
+    // Don't set _isListening to false here, let the status listener handle it
     try {
-      await _addTask(
-          content: taskContentForAudio); // Call the main adder function
-      addTaskSucceeded = true; // Assume success if no exception is caught here
-    } catch (e_add) {
-      // _addTask should ideally handle showing its own error snackbar via _showErrorSnackbar
-      print("Error occurred within _addTask from speech: $e_add");
-      // No need to re-throw or show another error here if _addTask handles it
-      addTaskSucceeded = false;
-    }
-
-    // --- Play confirmation sound and Haptic feedback *only if* task add seemed successful ---
-    if (addTaskSucceeded && mounted) {
-      // Check mounted again before playing audio/haptics
-      try {
-        await _audioPlayer.play(AssetSource('audio/gotitcaptain.mp3'));
-        HapticFeedback.lightImpact(); // <-- ADD HAPTIC FEEDBACK HERE
-        // print("Played confirmation sound."); // Optional logging
-      } catch (e_audio) {
-        print(
-            "Error playing confirmation sound: $e_audio"); // Optional logging for audio error
+      await _speechToText.stop();
+      // State update will happen via _speechStatusListener
+    } catch (e) {
+      debugPrint("Error stopping speech: $e");
+      // Force state update if stop command fails? Might be needed.
+      if (mounted) {
+        setState(() => _isListening = false);
+        _resetInputHint();
       }
     }
   }
 
-// ... rest of your _TaskNovaHomePageState class ...
+  // Called multiple times during listening (partial results) and once at the end (final result)
+  void _onSpeechResult(SpeechRecognitionResult result) {
+    if (!mounted) return;
 
-  void _resetInputHint() {
-    if (mounted) _taskInputController.clear();
+    final recognized = result.recognizedWords;
+    // Update the controller text continuously for partial results if listening
+    if (_isListening) {
+      _taskInputController.text = recognized;
+      // Keep cursor at the end
+      _taskInputController.selection = TextSelection.fromPosition(
+          TextPosition(offset: _taskInputController.text.length));
+    }
+
+    // _lastWords = recognized; // REMOVED - Field unused
+
+    // Check if this is the final result and has content
+    if (result.finalResult && recognized.trim().isNotEmpty) {
+      debugPrint("Final Speech Result: $recognized");
+      _addTaskFromSpeech(recognized.trim());
+      //  _lastWords = ''; // REMOVED - Field unused
+      // Don't clear controller here, _addTask might clear it or speech might stop naturally
+      // State (_isListening=false) update should come from status listener 'final'
+    }
   }
 
-  // --- Show Dialog Methods ---
+  Future<void> _addTaskFromSpeech(String content) async {
+    if (!mounted || content.isEmpty) return;
+    // Use the existing _addTask method, passing the recognized content
+    await _addTask(content: content);
+  }
 
-  /// Helper Function to Show Dialogs with Animation
+  void _resetInputHint() {
+    if (!mounted) return;
+    // Only change hint based on the current _isListening state
+    final hintText = _isListening ? 'Listening...' : 'Enter a new task...';
+    // Avoid clearing user input if they stopped listening and typed something
+    if (_isListening) {
+      _taskInputController.text = hintText; // Set text to 'Listening...'
+      // Move cursor to end
+      _taskInputController.selection = TextSelection.fromPosition(
+          TextPosition(offset: _taskInputController.text.length));
+    } else {
+      // If currently not listening, and the text field ONLY contains 'Listening...',
+      // clear it. Otherwise, leave user's text.
+      if (_taskInputController.text == 'Listening...') {
+        _taskInputController.clear();
+      }
+      // Intentionally removed check against _lastWords to avoid clearing potentially corrected user input
+    }
+  }
+
+  // --- UI Helpers ---
+  Future<void> _playSuccessSound() async {
+    if (!mounted) return;
+    try {
+      // Ensure you have 'audio/gotitcaptain.mp3' in your assets/audio folder
+      // and declared in pubspec.yaml
+      await _audioPlayer.play(AssetSource('audio/gotitcaptain.mp3'));
+    } catch (e) {
+      debugPrint("Error playing confirmation sound: $e");
+      // Maybe show a less intrusive error, like a log or subtle UI cue
+      // _showErrorSnackbar("Sound Error", "Could not play confirmation sound."); // Maybe too intrusive
+    }
+  }
+
   Future<T?> showAnimatedDialog<T>({
     required BuildContext context,
     required Widget Function(BuildContext) builder,
     bool barrierDismissible = true,
-    Duration transitionDuration = const Duration(milliseconds: 350),
-    Curve scaleCurve = Curves.easeOutCubic,
-    Curve fadeCurve = Curves.easeOutCubic,
+    Duration transitionDuration = _kMediumDuration,
+    Curve scaleCurve = Curves.easeOutCubic, // Keep parameters if needed later
+    Curve fadeCurve = Curves.easeOutCubic, // Keep parameters if needed later
   }) {
     return showGeneralDialog<T>(
       context: context,
       barrierDismissible: barrierDismissible,
       barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
-      barrierColor: Colors.black54,
+      // Use a semi-transparent barrier color
+      barrierColor: Colors.black.withAlpha((255 * 0.5).round()), // Use alpha
       transitionDuration: transitionDuration,
-      pageBuilder: (dialogContext, animation, secondaryAnimation) {
-        return builder(dialogContext);
-      },
-      transitionBuilder: (dialogContext, animation, secondaryAnimation, child) {
+      pageBuilder: (ctx, animation1, animation2) => Theme(
+        // Ensure dialog uses the app's theme
+        data: Theme.of(context),
+        child: builder(ctx),
+      ),
+      transitionBuilder: (context, animation1, animation2, child) {
+        // Combine Scale and Fade transitions
+        final curvedAnimation = CurvedAnimation(
+            parent: animation1,
+            curve: Curves.easeOutCubic); // Use scaleCurve here?
         return ScaleTransition(
-          scale: CurvedAnimation(parent: animation, curve: scaleCurve),
+          scale: Tween<double>(begin: 0.8, end: 1.0).animate(curvedAnimation),
           child: FadeTransition(
-            opacity: CurvedAnimation(parent: animation, curve: fadeCurve),
-            child: child,
-          ),
+              opacity: Tween<double>(begin: 0.5, end: 1.0).animate(
+                  CurvedAnimation(
+                      parent: animation1,
+                      curve: Curves.easeInOut)), // Use fadeCurve here?
+              child: child),
         );
       },
     );
   }
 
-  // Updated functions using the helper
+  // --- Dialog Openers ---
+  // Assumes MotivationDialogContent is correctly defined and imported
   Future<void> _showMotivationDialog() async {
+    if (!mounted) return; // Check mounted before showing dialog
     showAnimatedDialog<void>(
       context: context,
-      builder: (dialogContext) =>
-          MotivationDialogContent(apiService: _apiService),
+      // ***** THIS LINE STILL CAUSES ERROR IF MotivationDialogContent IS NOT RESOLVED *****
+      builder: (_) => MotivationDialogContent(apiService: _apiService),
     );
   }
 
+  // Assumes AiDialogContent is correctly defined and imported
   Future<void> _showAiResponseDialog(Task task) async {
+    if (!mounted) return; // Check mounted
+    // Don't show AI dialog for completed tasks? Already handled in buildAnimatedTaskItem's onPressed
     showAnimatedDialog<void>(
       context: context,
-      builder: (dialogContext) => _AiDialogContent(
-        apiService: _apiService,
-        taskContent: task.content,
+      builder: (_) =>
+          AiDialogContent(apiService: _apiService, taskContent: task.content),
+    );
+  }
+
+  // Consolidated error snackbar
+  void _showErrorSnackbar(String prefix, Object error) {
+    if (!mounted) return;
+    // Improve error message formatting
+    final String errorMessage = error is Exception
+        ? error.toString().replaceFirst("Exception: ", "")
+        : error.toString();
+    debugPrint("$prefix Error: $errorMessage"); // Log detailed error
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text("$prefix: $errorMessage"), // Show cleaner message
+        backgroundColor: Theme.of(context).colorScheme.error,
+        behavior: SnackBarBehavior.floating, // Match theme if defined
+        shape: Theme.of(context).snackBarTheme.shape, // Use theme shape
       ),
     );
   }
 
-  // Inside class _TaskNovaHomePageState { ... }
-
-// === ADD THIS ENTIRE METHOD ===
-  Future<void> _loadCategories() async {
+  // Consolidated success snackbar
+  void _showSuccessSnackbar(String message, {bool isDelete = false}) {
     if (!mounted) return;
-    setState(() => _loadingCategories = true);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: isDelete
+            ? Colors.orange[700] // Or use theme.colorScheme.tertiary?
+            : Colors.green[600], // Or use theme.colorScheme.secondary?
+        behavior: SnackBarBehavior.floating,
+        shape: Theme.of(context).snackBarTheme.shape,
+      ),
+    );
+  }
 
+  Future<void> _openTaskDetailDialog(Task task) async {
+    if (!mounted) return; // Check mounted status first
+
+    // Find the task in the current list state
+    final int taskIndex = _tasks.indexWhere((t) => t.id == task.id);
+    if (taskIndex == -1) {
+      _showErrorSnackbar(
+          "Error", "Task not found in list. It might have been deleted.");
+      return;
+    }
+
+    // Prepare categories, handling potential loading errors
+    List<String> categoriesToShow = ['default']; // Start with fallback
+    // bool categoriesLoaded = false; // REMOVED - Unused variable
     try {
-      final categories = await _apiService.fetchCategories();
+      final fetchedCategories = await _apiService.fetchCategories();
       if (mounted) {
-        setState(() {
-          // Ensure 'default' is always present and first? Or handle empty list.
-          _categories = [
-            'default',
-            ...categories.where((c) => c != 'default').toSet()
-          ]; // Example: Ensure default is first
-          // Ensure selectedCategory is valid
-          if (!_categories.contains(_selectedCategory)) {
-            _selectedCategory =
-                _categories.isNotEmpty ? _categories.first : 'default';
-          }
-          _loadingCategories = false;
-        });
+        // Check mounted *after* await
+        categoriesToShow = _prepareCategories(fetchedCategories);
+        // categoriesLoaded = true; // REMOVED - Unused variable
+      } else {
+        return; // Don't proceed if widget disposed during category fetch
       }
     } catch (e) {
       if (mounted) {
-        setState(() => _loadingCategories = false);
-        _showErrorSnackbar("Load categories failed", e);
+        // Check mounted *in catch block*
+        _showErrorSnackbar("Could not load categories", e);
       }
+      // Continue with default categories, or decide to abort? Let's continue.
     }
-  }
-// ===============================
 
-  // --- Error Snackbar Helper ---
-  void _showErrorSnackbar(String prefix, Object error) {
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-              "$prefix: ${error.toString().replaceFirst('Exception: ', '')}"),
-          backgroundColor:
-              Theme.of(context).colorScheme.error, // Use themed error color
-          behavior: SnackBarBehavior.floating, // Optional: Make snackbar float
-          shape: RoundedRectangleBorder(
-            // Optional: Rounded corners
-            borderRadius: BorderRadius.circular(10.0),
-          ),
-        ),
-      );
-    }
+    // Need to check mounted again before showing the dialog
+    if (!mounted) return;
+
+    // Use the showAnimatedDialog helper
+    showAnimatedDialog(
+      context: context,
+      builder: (dialogContext) => TaskDetailDialog(
+        // Pass the potentially modified task object from the list state
+        // IMPORTANT: Pass a DEEP COPY to prevent modifications in the dialog
+        // from directly affecting the list state until the callback is triggered.
+        task: Task.copyWith(_tasks[taskIndex]),
+        apiService: _apiService,
+        categories: categoriesToShow,
+        // Callback when the dialog signals a potential update
+        onTaskPossiblyUpdated: (updatedTaskData) {
+          // Ensure the main page is still mounted when the callback occurs
+          if (mounted) {
+            setState(() {
+              // Find the index again, in case the list changed while dialog was open
+              final currentIndex =
+                  _tasks.indexWhere((t) => t.id == updatedTaskData.id);
+              if (currentIndex != -1) {
+                // Replace the item in the list with the updated data (using copyWith ensures we don't just reuse the dialog's internal state object)
+                _tasks[currentIndex] = Task.copyWith(updatedTaskData);
+              }
+              // No need to call _listKey.currentState?....?
+              // setState should be sufficient to rebuild the specific item via _buildAnimatedTaskItem
+            });
+          }
+        },
+      ),
+    );
   }
 
-  // --- Build Method ---
   @override
   Widget build(BuildContext context) {
-    const String inputHint = 'Enter a new task...';
-    final theme = Theme.of(context); // Get theme for UI elements
+    final theme = Theme.of(context);
+    // Determine clear button visibility based on controller text, not listening state directly affecting display here
+    final bool showClearButton = _taskInputController.text.isNotEmpty &&
+        _taskInputController.text != 'Listening...';
 
     return Scaffold(
       appBar: AppBar(
@@ -708,680 +913,509 @@ class _TaskNovaHomePageState extends State<TaskNovaHomePage> {
           IconButton(
             icon: const Icon(Icons.emoji_events_outlined),
             tooltip: 'Motivate',
-            onPressed: _showMotivationDialog,
-            // Use foregroundColor from AppBar theme implicitly
+            onPressed: _showMotivationDialog, // Assumes MotivationDialog works
           ),
           IconButton(
             icon: Icon(widget.isDarkMode ? Icons.light_mode : Icons.dark_mode),
             tooltip: 'Toggle Theme',
             onPressed: widget.onThemeChanged,
-            // Use foregroundColor from AppBar theme implicitly
           ),
         ],
       ),
       body: Column(
         children: [
+          // --- Input Row ---
+          _buildInputRow(theme, showClearButton), // Pass calculated state
+
+          // --- Main Content Area ---
           Expanded(
-            child: Column(
-              children: [
-                // --- Task Input Row ---
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _taskInputController,
-                          onChanged: (value) {
-                            // Need setState to update suffixIcon visibility
-                            if (mounted) setState(() {});
-                          },
-                          decoration: InputDecoration(
-                            hintText: inputHint,
-                            border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(
-                                    8), // Consistent rounding
-                                borderSide: BorderSide(
-                                    color: theme.colorScheme.outline
-                                        .withOpacity(0.5)) // Subtle border
-                                ),
-                            focusedBorder: OutlineInputBorder(
-                                // Style when focused
-                                borderRadius: BorderRadius.circular(8),
-                                borderSide: BorderSide(
-                                    color: theme.colorScheme.primary,
-                                    width: 1.5)),
-                            contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 10), // Adjusted padding
-                            suffixIcon: _taskInputController.text.isNotEmpty
-                                ? IconButton(
-                                    icon: const Icon(Icons.clear, size: 20.0),
-                                    tooltip: 'Clear Text',
-                                    color: theme.iconTheme.color?.withOpacity(
-                                        0.7), // Use themed icon color
-                                    onPressed: () {
-                                      if (mounted) {
-                                        // Check mounted before setState
-                                        setState(
-                                            () => _taskInputController.clear());
-                                      }
-                                    },
-                                  )
-                                : null,
-                          ),
-                          onSubmitted: (_) => _addTask(),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      // Add Task Button (using themed icon color now)
-                      IconButton(
-                        icon: const Icon(Icons.add_circle_outline),
-                        iconSize: 30,
-                        // Using specific primary color might be intended here
-                        color: theme.colorScheme.primary,
-                        tooltip: 'Add Task',
-                        onPressed: _addTask,
-                      ),
-                      const SizedBox(width: 4),
-                      // Mic Button (using themed icon color)
-                      IconButton(
-                        icon: Icon(_isListening ? Icons.mic_off : Icons.mic),
-                        iconSize: 30,
-                        color: _isListening
-                            ? theme.colorScheme.error
-                            : theme.colorScheme.primary,
-                        tooltip:
-                            _isListening ? 'Stop Listening' : 'Add via Voice',
-                        onPressed:
-                            (_speechToText.isNotListening || !_isListening)
-                                ? _startListening
-                                : _stopListening,
-                      ),
-                    ],
-                  ),
-                ),
-                // --- Task List Area ---
-                Expanded(
-                  child: _isLoading
-                      ? Center(
-                          child: CircularProgressIndicator(
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                  theme.colorScheme.primary))) // Themed loading
-                      : _errorMessage != null
-                          ? Center(
-                              child: Padding(
-                                padding: const EdgeInsets.all(16),
-                                child: Text(
-                                  _errorMessage!,
-                                  style: TextStyle(
-                                      color: theme.colorScheme
-                                          .error), // Themed error text
-                                  textAlign: TextAlign.center,
-                                ),
-                              ),
-                            )
-                          : _tasks.isEmpty
-                              ? Center(
-                                  // Keeping improved empty state
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(32.0),
-                                    child: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(Icons.check_box_outline_blank,
-                                            size: 80.0,
-                                            color: theme.iconTheme.color
-                                                ?.withOpacity(
-                                                    0.5)), // Themed icon
-                                        const SizedBox(height: 16.0),
-                                        Text(
-                                            'All tasks complete, or list is empty!',
-                                            style: theme.textTheme.headlineSmall
-                                                ?.copyWith(
-                                                    color: theme.textTheme
-                                                        .bodyMedium?.color
-                                                        ?.withOpacity(
-                                                            0.7)), // Themed text
-                                            textAlign: TextAlign.center),
-                                        const SizedBox(height: 8.0),
-                                        Text(
-                                            'Add a new task using the field above\nor tap the microphone!',
-                                            style: theme.textTheme.bodyMedium
-                                                ?.copyWith(
-                                                    color: theme.textTheme
-                                                        .bodyMedium?.color
-                                                        ?.withOpacity(
-                                                            0.6)), // Themed text
-                                            textAlign: TextAlign.center),
-                                      ],
-                                    ),
-                                  ),
-                                )
-                              : RefreshIndicator(
-                                  onRefresh: _loadTasks,
-                                  child: AnimatedList(
-                                    key: _listKey,
-                                    initialItemCount: _tasks.length,
-                                    padding: const EdgeInsets.only(
-                                        bottom:
-                                            80), // Add padding at bottom to avoid overlap with potential FAB/Banner
-                                    itemBuilder: (context, index, animation) {
-                                      if (index >= _tasks.length) {
-                                        return const SizedBox
-                                            .shrink(); // Bounds check
-                                      }
-                                      return _buildAnimatedTaskItem(
-                                          _tasks[index], animation, index);
-                                    },
-                                  ),
-                                ),
-                ),
-              ],
+            child: AnimatedSwitcher(
+              // Animate between states
+              duration: _kMediumDuration,
+              child: _isLoading
+                  ? const Center(
+                      key: ValueKey('loading'),
+                      child: CircularProgressIndicator())
+                  : _errorMessage != null
+                      ? _buildErrorState() // Already wrapped in Padding etc.
+                      : _buildTaskList(), // Includes RefreshIndicator and AnimatedList
             ),
           ),
-          // --- Ad Banner Area ---
+
+          // --- Banner Ad ---
+          // Conditionally build the Ad container
           if (_isBannerAdLoaded && _bannerAd != null)
             SafeArea(
-              top: false,
+              // Keep SafeArea for the ad
+              top: false, // Don't apply safe area padding to the top
               child: Container(
-                color: theme.colorScheme.surface, // Theme background
+                key: const ValueKey(
+                    'ad_loaded'), // Key for AnimatedSwitcher if used
+                color: theme.scaffoldBackgroundColor, // Match background
                 alignment: Alignment.center,
                 width: _bannerAd!.size.width.toDouble(),
                 height: _bannerAd!.size.height.toDouble(),
                 child: AdWidget(ad: _bannerAd!),
               ),
             )
-          else
-            SizedBox(height: AdSize.banner.height.toDouble()), // Reserve space
+          else // Placeholder if ad not loaded/available
+            SizedBox(
+                key: const ValueKey(
+                    'ad_placeholder'), // Key for AnimatedSwitcher if used
+                height: AdSize.banner.height.toDouble() // Reserve space
+                ),
         ],
       ),
     );
   }
 
-  // --- Helper: Build list item with polish ---
+  Widget _buildInputRow(ThemeData theme, bool showClearButton) {
+    return Padding(
+      padding: _kInputRowPadding,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(
+            child: Semantics(
+              label: "Task input field",
+              child: TextField(
+                controller: _taskInputController,
+                // Input field is only truly read-only when listening actively
+                // It should be editable otherwise, even if speech isn't enabled.
+                readOnly: _isListening,
+                onChanged: (_) {
+                  // Need setState to update the clear button visibility
+                  if (mounted) {
+                    setState(() {});
+                  }
+                },
+                decoration: InputDecoration(
+                  // Use controller state to determine hint/text, _resetInputHint handles this
+                  hintText:
+                      _isListening ? 'Listening...' : 'Enter a new task...',
+                  suffixIcon: showClearButton
+                      ? IconButton(
+                          icon: const Icon(
+                            Icons.clear,
+                            size: _kIconSizeSmall + 2,
+                          ),
+                          tooltip: 'Clear Text',
+                          // Use theme color directly, theme provides non-null iconTheme
+                          color: theme.iconTheme.color!
+                              .withAlpha((255 * 0.7).round()), // Use alpha
+                          onPressed: () {
+                            if (mounted) {
+                              // Simply clear the controller and update state
+                              _taskInputController.clear();
+                              setState(() {});
+                            }
+                          },
+                        )
+                      : null,
+                ),
+                onSubmitted: (_) =>
+                    _addTask(), // Add task on keyboard submission
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Semantics(
+            label: "Add task",
+            button: true,
+            child: IconButton(
+              icon: const Icon(Icons.add_circle),
+              iconSize: _kIconSizeLarge,
+              color: theme.colorScheme.primary,
+              tooltip: 'Add Task',
+              // Disable add button while listening? Makes sense.
+              onPressed: _isListening ? null : _addTask,
+            ),
+          ),
+          const SizedBox(width: 4),
+          Semantics(
+            label: _isListening
+                ? "Stop voice input"
+                : (_isSpeechEnabled
+                    ? "Add task via voice"
+                    : "Voice input unavailable"),
+            button: true,
+            child: IconButton(
+              icon: Icon(_isListening ? Icons.mic_off : Icons.mic),
+              iconSize: _kIconSizeLarge,
+              color: _isListening
+                  ? theme.colorScheme.error
+                  : (_isSpeechEnabled
+                      ? theme.colorScheme.primary
+                      : theme.disabledColor), // Grey out if not enabled
+              tooltip: _isListening
+                  ? 'Stop Listening'
+                  : (_isSpeechEnabled ? 'Add via Voice' : 'Speech Unavailable'),
+              // Only allow press if speech is enabled
+              onPressed: _isSpeechEnabled
+                  ? (_isListening ? _stopListening : _startListening)
+                  : null, // Disable if speech not enabled
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildErrorState() {
+    final theme = Theme.of(context);
+    // Keep this structure, it provides good context and a retry action
+    return Center(
+      // Use Center for vertical/horizontal alignment
+      key: const ValueKey('error'), // Key for AnimatedSwitcher
+      child: Padding(
+        padding: _kErrorPadding,
+        child: Column(
+          mainAxisSize: MainAxisSize.min, // Take only needed vertical space
+          mainAxisAlignment:
+              MainAxisAlignment.center, // Center content vertically
+          crossAxisAlignment: CrossAxisAlignment.center, // Center horizontally
+          children: [
+            Icon(
+              Icons.error_outline, // Use a more standard error icon?
+              size: 60,
+              color: theme.colorScheme.error
+                  .withAlpha((255 * 0.8).round()), // Use alpha
+            ),
+            const SizedBox(height: 16),
+            Text(
+              "Couldn't load tasks",
+              style: theme.textTheme.headlineSmall
+                  ?.copyWith(color: theme.colorScheme.error),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _errorMessage ?? "An unknown error occurred.",
+              style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurface
+                      .withAlpha((255 * 0.7).round()) // Use alpha
+                  ),
+              textAlign: TextAlign.center, // Center error message text
+            ),
+            const SizedBox(height: 24), // Increased spacing before button
+            ElevatedButton.icon(
+              icon: const Icon(Icons.refresh),
+              label: const Text('Retry'),
+              onPressed: _loadInitialData, // Call initial load again
+              style: ElevatedButton.styleFrom(
+                // Style explicitly or rely on theme
+                backgroundColor: theme
+                    .colorScheme.errorContainer, // Use themed container colors
+                foregroundColor: theme.colorScheme.onErrorContainer,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTaskList() {
+    final theme = Theme.of(context); // Define theme here for use in empty state
+    // Key is important for AnimatedSwitcher when switching between empty/list
+    if (_tasks.isEmpty) {
+      return Center(
+        key: const ValueKey('empty'),
+        child: Padding(
+          padding: _kEmptyListPadding,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.check_box_outline_blank,
+                size: 80.0,
+                color: theme.iconTheme.color!.withAlpha(
+                    (255 * 0.5).round()), // Use alpha & direct access
+              ),
+              const SizedBox(height: 16.0),
+              Text(
+                'No tasks here!',
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    // Use headlineSmall style
+                    // Use alpha and safe access
+                    color: Theme.of(context)
+                        .textTheme
+                        .bodyMedium
+                        ?.color
+                        ?.withAlpha((255 * 0.7).round())),
+              ),
+              const SizedBox(height: 8.0),
+              Text(
+                'Add a new task above or use the mic.',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    // Use alpha and safe access
+                    color: Theme.of(context)
+                        .textTheme
+                        .bodyMedium
+                        ?.color
+                        ?.withAlpha((255 * 0.6).round())),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      );
+    } else {
+      // Use a Key on RefreshIndicator if it's the direct child of AnimatedSwitcher
+      return RefreshIndicator(
+        key: const ValueKey('list'),
+        onRefresh: _loadTasks,
+        child: AnimatedList(
+          key: _listKey, // Use the global key
+          initialItemCount: _tasks.length, // Reflect current list length
+          padding: const EdgeInsets.only(
+              top: 8, bottom: 80), // Padding for content and FAB/Ad space
+          itemBuilder: (context, index, animation) {
+            // Safety check - though should not happen if initialItemCount is correct
+            if (index >= _tasks.length) return const SizedBox.shrink();
+            final task = _tasks[index];
+            // Pass task, animation, and index to the builder method
+            return _buildAnimatedTaskItem(task, animation, index);
+          },
+        ),
+      );
+    }
+  }
+
   Widget _buildAnimatedTaskItem(
       Task task, Animation<double> animation, int index) {
+    debugPrint(
+        "Build Item ${task.id}: isRecurring=${task.isRecurring} (Type: ${task.recurrenceType})");
     final theme = Theme.of(context);
-    final textStyleIncomplete = theme.textTheme.titleMedium?.copyWith(
-      decoration: TextDecoration.none,
-      color: theme.textTheme.titleMedium?.color,
-    );
-    final textStyleComplete = theme.textTheme.titleMedium?.copyWith(
-      decoration: TextDecoration.lineThrough,
-      color: theme.textTheme.titleMedium?.color?.withOpacity(0.6),
-      decorationColor: theme.textTheme.titleMedium?.color?.withOpacity(0.7),
+    final bool isComplete = task.completed;
+
+    // Define text styles based on completion state
+    final textStyle =
+        (theme.textTheme.titleMedium ?? const TextStyle()).copyWith(
+      decoration: isComplete ? TextDecoration.lineThrough : TextDecoration.none,
+      color: isComplete
+          ? theme.disabledColor
+          : theme.colorScheme.onSurface
+              .withAlpha((255 * 0.87).round()), // Use alpha
+      decorationColor: isComplete
+          ? theme.disabledColor
+              .withAlpha((255 * 0.7).round()) // Use alpha safely
+          : null,
       decorationThickness: 1.5,
     );
 
-    // === Make sure this matches your existing animation setup ===
+    final int totalSubs = task.totalSubtasks;
+    final int completedSubs = task.completedSubtasks;
+    final bool hasSubs = totalSubs > 0;
+    final double? subProgress = hasSubs
+        ? (completedSubs / totalSubs.toDouble())
+        : null; // Ensure double division
+    final bool isRecurring = task.isRecurring; // Use the getter from Task model
+
     return SizeTransition(
       sizeFactor: CurvedAnimation(parent: animation, curve: Curves.easeOut),
-      axis: Axis.vertical,
       child: FadeTransition(
-        opacity: CurvedAnimation(parent: animation, curve: Curves.easeIn),
+        opacity: CurvedAnimation(parent: animation, curve: Curves.easeInOut),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 6.0),
-          child: Container(
-            decoration: BoxDecoration(
-                // Make sure cardColor is defined or fallback
-                color: Theme.of(context).cardColor ??
-                    (widget.isDarkMode ? Colors.grey[800] : Colors.white),
-                borderRadius: BorderRadius.circular(12.0),
-                boxShadow: [
-                  // Optional subtle shadow
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 4,
-                    offset: const Offset(0, 2),
-                  )
-                ]),
-            child: ListTile(
-              // === MODIFY THIS LISTTILE ===
-              key: ValueKey(task.id),
-              dense: true,
+          padding: _kListItemPadding,
+          child: Card(
+            child: InkWell(
               onTap: () => _toggleTaskCompletion(task),
-              onLongPress: () =>
-                  _openTaskDetailDialog(task), // <<< ADDED onLongPress
-
-              leading: Transform.scale(
-                // Keep Checkbox
-                scale: 1.1,
-                child: Checkbox(
-                  value: task.completed,
-                  activeColor: theme.colorScheme.primary,
-                  visualDensity: VisualDensity.compact,
-                  onChanged: (_) => _toggleTaskCompletion(task),
-                ),
-              ),
-
-              title: AnimatedDefaultTextStyle(
-                // Keep Title
-                style: task.completed
-                    ? (textStyleComplete ?? const TextStyle())
-                    : (textStyleIncomplete ??
-                        const TextStyle()), // Use fallback
-                duration: const Duration(milliseconds: 300),
-                curve: Curves.easeInOut,
-                child: Text(
-                  task.content, // Make sure you changed this from task to task.content
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-
-              // === ADD SUBTITLE HERE ===
-              subtitle: task.hasSubtasks
-                  ? Padding(
-                      padding: const EdgeInsets.only(top: 4),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: LinearProgressIndicator(
-                              value: task.totalSubtasks > 0
-                                  ? (task.completedSubtasks /
-                                      task.totalSubtasks)
-                                  : 0.0,
-                              backgroundColor: theme
-                                      .colorScheme.surfaceVariant ??
-                                  Colors.grey
-                                      .shade300, // Use theme color or fallback
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                theme.colorScheme.primary.withOpacity(0.7),
+              onLongPress: () => _openTaskDetailDialog(task),
+              borderRadius: BorderRadius.circular(12.0), // Match card shape
+              child: Padding(
+                padding: const EdgeInsets.only(
+                    left: 0,
+                    right: 8.0,
+                    top: 4.0,
+                    bottom: 4.0), // Adjust padding slightly
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    // --- Checkbox ---
+                    Semantics(
+                      label:
+                          "Mark task ${task.content} as ${isComplete ? 'incomplete' : 'complete'}",
+                      checked: isComplete,
+                      child: Checkbox(
+                        value: isComplete,
+                        onChanged: (_) => _toggleTaskCompletion(task),
+                      ),
+                    ),
+                    // --- Task Content & Progress ---
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8.0, vertical: 6.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // *** MODIFIED SECTION for Recurrence Icon ***
+                            Semantics(
+                              label:
+                                  "Task description: ${task.content}${isRecurring ? ' (Recurring)' : ''}", // Add semantics info
+                              child: Row(
+                                // Use Row to place icon next to text
+                                crossAxisAlignment: CrossAxisAlignment
+                                    .start, // Align icon/text top
+                                children: [
+                                  // Conditionally display recurrence icon
+                                  if (isRecurring)
+                                    Padding(
+                                      padding: const EdgeInsets.only(
+                                          right: 6.0,
+                                          top: 2.0), // Adjust padding/alignment
+                                      child: Icon(
+                                        Icons.repeat,
+                                        size: _kIconSizeSmall -
+                                            2, // Make icon smaller
+                                        color: theme.hintColor.withAlpha((255 *
+                                                0.8)
+                                            .round()), // Use hint color safely
+                                      ),
+                                    ),
+                                  // Text takes remaining space
+                                  Expanded(
+                                    child: AnimatedDefaultTextStyle(
+                                      style:
+                                          textStyle, // Apply calculated style
+                                      duration: _kShortDuration,
+                                      curve: Curves.easeInOut,
+                                      child: Text(
+                                        task.content,
+                                        maxLines: 2, // Limit lines
+                                        overflow: TextOverflow
+                                            .ellipsis, // Handle overflow
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
-                              minHeight: 4,
-                              borderRadius: BorderRadius.circular(
-                                  2), // Optional rounded corners
+                            ),
+                            // *** END OF MODIFIED SECTION ***
+
+                            // Show progress bar if subtasks exist
+                            if (hasSubs && subProgress != null)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 6.0),
+                                child: Semantics(
+                                  label:
+                                      "Subtask progress: $completedSubs of $totalSubs complete",
+                                  value: "${(subProgress * 100).round()}%",
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        child: LinearProgressIndicator(
+                                          value: subProgress,
+                                          minHeight: 5,
+                                          borderRadius:
+                                              BorderRadius.circular(2.5),
+                                          // Uses theme for colors
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        '$completedSubs/$totalSubs',
+                                        style: theme.textTheme.bodySmall
+                                            ?.copyWith(color: theme.hintColor),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    // --- Action Buttons ---
+                    SizedBox(
+                      // Keep fixed width for consistency
+                      width: 90,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          // --- Category Chip (Optional) ---
+                          if (task.category != 'default')
+                            Semantics(
+                              label: "Task category: ${task.category}",
+                              child: Container(
+                                constraints: const BoxConstraints(
+                                    maxWidth: 45), // Limit chip width
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 2),
+                                margin: const EdgeInsets.only(right: 4),
+                                decoration: BoxDecoration(
+                                  // Use theme chip colors with alpha safely
+                                  color: theme.chipTheme
+                                      .backgroundColor // Removed '!' and use '?.' for safety
+                                      ?.withAlpha((255 * 0.7).round()),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(
+                                  task.category,
+                                  // Use chip theme label style safely
+                                  style: theme.chipTheme.labelStyle
+                                      ?.copyWith(fontSize: 9),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ),
+                          // --- AI Button ---
+                          Semantics(
+                            label: "Ask AI about this task",
+                            button: true,
+                            enabled: !isComplete, // Disable if task complete
+                            child: AnimatedOpacity(
+                              duration: _kShortDuration,
+                              opacity:
+                                  isComplete ? 0.4 : 1.0, // Fade if disabled
+                              child: IconButton(
+                                icon: const Icon(Icons.psychology_alt,
+                                    size: _kIconSizeSmall),
+                                visualDensity:
+                                    VisualDensity.compact, // Make denser
+                                padding:
+                                    const EdgeInsets.all(4), // Reduce padding
+                                tooltip: 'Ask AI',
+                                // Disable onPressed, not just visually hide
+                                onPressed: isComplete
+                                    ? null
+                                    : () => _showAiResponseDialog(task),
+                                // Use theme icon color with alpha safely
+                                color: theme.iconTheme
+                                    .color // Removed '!' and use '?.' for safety
+                                    ?.withAlpha((255 * 0.7).round()),
+                              ),
                             ),
                           ),
-                          const SizedBox(width: 8),
-                          Text(
-                            '${task.completedSubtasks}/${task.totalSubtasks}', // Counts
-                            // Style the count text
-                            style: theme.textTheme.bodySmall
-                                ?.copyWith(color: theme.hintColor),
+                          // --- Delete Button ---
+                          Semantics(
+                            label: "Delete task",
+                            button: true,
+                            child: IconButton(
+                              icon: const Icon(Icons.delete_outline,
+                                  size: _kIconSizeSmall),
+                              visualDensity: VisualDensity.compact,
+                              padding: const EdgeInsets.all(4),
+                              tooltip: 'Delete Task',
+                              // Use theme error color with alpha
+                              color: theme.colorScheme.error
+                                  .withAlpha((255 * 0.8).round()), // Use alpha
+                              onPressed: () => _deleteTask(task.id, index),
+                            ),
                           ),
                         ],
                       ),
                     )
-                  : null, // No subtitle if no subtasks
-              // === END SUBTITLE ===
-
-              // === MODIFY TRAILING ROW CHILDREN HERE ===
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // === ADD CATEGORY INDICATOR (Conditional) ===
-                  if (task.category != 'default')
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 2,
-                      ),
-                      margin: const EdgeInsets.only(
-                          right: 6), // Spacing before next button
-                      decoration: BoxDecoration(
-                        // Use a themed background, maybe less opaque
-                        color:
-                            theme.colorScheme.primaryContainer.withOpacity(0.7),
-                        borderRadius: BorderRadius.circular(12), // Pill shape
-                      ),
-                      child: Text(
-                        task.category,
-                        style: TextStyle(
-                          fontSize: 10, // Small text
-                          fontWeight: FontWeight.w500,
-                          // Themed text color
-                          color: theme.colorScheme.onPrimaryContainer
-                              .withOpacity(0.9),
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  // === END CATEGORY INDICATOR ===
-
-                  // --- KEEP EXISTING AI BUTTON ---
-                  AnimatedOpacity(
-                    duration: const Duration(milliseconds: 300),
-                    opacity: task.completed ? 0.6 : 1.0,
-                    child: IconButton(
-                      icon: const Icon(Icons.psychology_alt, size: 20),
-                      visualDensity: VisualDensity.compact,
-                      tooltip: 'Ask AI',
-                      onPressed: task.completed
-                          ? null
-                          : () => _showAiResponseDialog(task),
-                      // Themed icon color
-                      color: theme.iconTheme.color?.withOpacity(0.8),
-                    ),
-                  ),
-                  // --- KEEP EXISTING DELETE BUTTON ---
-                  AnimatedOpacity(
-                    duration: const Duration(milliseconds: 300),
-                    opacity: task.completed ? 0.6 : 1.0,
-                    child: IconButton(
-                      icon: const Icon(Icons.delete_outline, size: 20),
-                      visualDensity: VisualDensity.compact,
-                      tooltip: 'Delete Task',
-                      // Themed error color
-                      color: theme.colorScheme.error.withOpacity(0.8),
-                      onPressed: () => _deleteTask(task.id, index),
-                    ),
-                  ),
-                ],
-              ),
-              // === END TRAILING ROW MODIFICATION ===
-            ), // End ListTile
-          ), // End Container
-        ), // End Padding
-      ), // End FadeTransition
-    ); // End SizeTransition
-  }
-} // End _TaskNovaHomePageState
-
-// ===================================================
-// 💬 DIALOG WIDGETS (WITH NEW STYLING/TRANSITIONS)
-// ===================================================
-
-class MotivationDialogContent extends StatefulWidget {
-  final ApiService apiService;
-
-  const MotivationDialogContent({required this.apiService, super.key});
-
-  @override
-  State<MotivationDialogContent> createState() =>
-      _MotivationDialogContentState();
-}
-
-class _MotivationDialogContentState extends State<MotivationDialogContent> {
-  bool _isLoading = true;
-  String? _motivationalQuote;
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    _fetchMotivationalQuote();
-  }
-
-  Future<void> _fetchMotivationalQuote() async {
-    if (!mounted) return;
-
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
-
-    try {
-      // Assuming your ApiService has a method to fetch motivational quotes
-      final quote = await widget.apiService.getMotivation();
-      if (mounted) {
-        setState(() {
-          _motivationalQuote = quote;
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _error = e.toString().replaceFirst('Exception: ', '');
-          _isLoading = false;
-        });
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return AlertDialog(
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16.0),
-      ),
-      title: const Text('Motivation'),
-      content: Container(
-        constraints: const BoxConstraints(minHeight: 80, minWidth: 250),
-        alignment: Alignment.center,
-        child: _isLoading
-            ? Center(
-                child: CircularProgressIndicator(
-                  valueColor:
-                      AlwaysStoppedAnimation<Color>(theme.colorScheme.primary),
+                  ],
                 ),
-              )
-            : _error != null
-                ? Column(
-                    mainAxisSize: MainAxisSize.min,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.error_outline_rounded,
-                          color: theme.colorScheme.error, size: 40),
-                      const SizedBox(height: 12),
-                      Text(
-                        'Oops! $_error',
-                        style: theme.textTheme.bodyMedium
-                            ?.copyWith(color: theme.colorScheme.error),
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
-                  )
-                : Text(
-                    _motivationalQuote ??
-                        'Stay focused and keep pushing forward! You are doing great!',
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.bodyLarge,
-                  ),
-      ),
-      actions: [
-        if (_error != null)
-          TextButton(
-            onPressed: _fetchMotivationalQuote,
-            child: const Text('Retry'),
-          ),
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Close'),
-        ),
-      ],
-    );
-  }
-}
-
-// _AiDialogContent widget definition remains the same
-class _AiDialogContent extends StatefulWidget {
-  final ApiService apiService;
-  final String taskContent;
-  const _AiDialogContent(
-      {required this.apiService, required this.taskContent, super.key});
-  @override
-  State<_AiDialogContent> createState() => _AiDialogContentState();
-}
-
-// === CORRECTED STATE CLASS ===
-class _AiDialogContentState extends State<_AiDialogContent> {
-  bool _isDialogLoading = true;
-  String? _aiResponse;
-  String? _aiError;
-
-  // --- TTS State ---
-  late FlutterTts flutterTts;
-  bool _isSpeaking = false;
-  // --- End TTS State ---
-
-  @override
-  void initState() {
-    super.initState();
-    _initializeTts(); // Initialize TTS
-    _fetchAiResponse();
-  }
-
-  // === CORRECTED Initialize TTS Method ===
-  void _initializeTts() {
-    flutterTts = FlutterTts();
-    // ADD THESE LISTENERS!
-    flutterTts.setCompletionHandler(() {
-      if (mounted) setState(() => _isSpeaking = false);
-      print("TTS Completion Handler Fired"); // Debug print
-    });
-    flutterTts.setErrorHandler((msg) {
-      print("TTS Error Handler Fired: $msg"); // Debug print
-      if (mounted) setState(() => _isSpeaking = false);
-    });
-    flutterTts.setStartHandler(() {
-      print("TTS Start Handler Fired"); // Debug print
-      if (mounted) setState(() => _isSpeaking = true);
-    });
-    // --- End Listener Addition ---
-    // flutterTts.setLanguage("en-US"); // Optional
-    // flutterTts.setPitch(1.0);      // Optional
-    // flutterTts.setSpeechRate(0.5); // Optional
-  }
-  // ===================================
-
-  // === ADDED Dispose Method ===
-  @override
-  void dispose() {
-    flutterTts.stop(); // Stop speaking when dialog is disposed
-    print("AI Dialog Disposed - TTS Stopped"); // Debug print
-    super.dispose(); // Call parent dispose AFTER stopping TTS
-  }
-  // ==========================
-
-  Future<void> _fetchAiResponse() async {
-    if (!mounted) return;
-    setState(() {
-      _isDialogLoading = true;
-      _aiError = null;
-      _aiResponse = null;
-      _isSpeaking = false; // Ensure speaking state is reset on fetch
-    });
-    try {
-      final result = await widget.apiService.askAI(widget.taskContent);
-      if (mounted) {
-        setState(() {
-          _aiResponse = result;
-          _isDialogLoading = false;
-        });
-        // No automatic _speak call here - user triggers via button
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _aiError = e.toString().replaceFirst('Exception: ', '');
-          _isDialogLoading = false;
-        });
-      }
-    }
-  }
-
-  // === Speak/Stop Functions (Keep these) ===
-  Future<void> _speak(String text) async {
-    if (text.isNotEmpty && mounted) {
-      var result = await flutterTts.stop(); // Stop just in case
-      if (result == 1) {
-        // Check if stop was successful before speaking
-        // setState(() => _isSpeaking = true); // setStartHandler should manage this
-        await flutterTts.speak(text);
-      }
-    }
-  }
-
-  Future<void> _stopSpeaking() async {
-    if (mounted) {
-      var result = await flutterTts.stop();
-      // if (result == 1) setState(() => _isSpeaking = false); // Let completion handler manage this for consistency
-    }
-  }
-  // ===========================================
-
-  // *** CORRECTED build Method ***
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return AlertDialog(
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16.0),
-      ),
-      // Use theme's default title text style
-      title: const Text('AI Insights'),
-
-      content: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(vertical: 12.0),
-        child: Container(
-          constraints: const BoxConstraints(minHeight: 80, minWidth: 250),
-          alignment: Alignment.center,
-          child: _isDialogLoading
-              ? Center(
-                  child: CircularProgressIndicator(
-                  valueColor:
-                      AlwaysStoppedAnimation<Color>(theme.colorScheme.primary),
-                ))
-              : _aiError != null
-                  ? Column(
-                      // Consistent Error display
-                      mainAxisSize: MainAxisSize.min,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.error_outline_rounded,
-                            color: theme.colorScheme.error, size: 40),
-                        const SizedBox(height: 12),
-                        Text(
-                          'Oops! $_aiError',
-                          style: theme.textTheme.bodyMedium
-                              ?.copyWith(color: theme.colorScheme.error),
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
-                    )
-                  : SelectableText(_aiResponse ?? 'No insights found.',
-                      style: theme.textTheme.bodyLarge),
-        ),
-      ),
-
-      // === CORRECTED Actions - includes Speak/Stop Button ===
-      actions: <Widget>[
-        // Add the Speak/Stop Button
-        if (!_isDialogLoading && _aiResponse != null && _aiResponse!.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.only(right: 8.0),
-            child: IconButton(
-              icon: Icon(_isSpeaking
-                  ? Icons.stop_circle_outlined // Icon for Stop
-                  : Icons.play_circle_outline), // Icon for Play
-              tooltip: _isSpeaking ? 'Stop Reading' : 'Read Aloud',
-              color: theme.colorScheme.primary,
-              iconSize: 28,
-              onPressed: _isSpeaking
-                  ? _stopSpeaking
-                  : () => _speak(_aiResponse!), // Call speak with response
+              ),
             ),
           ),
-        // --- End Speak/Stop Button ---
-
-        // Existing Retry Button
-        if (_aiError != null)
-          TextButton(
-            onPressed: _fetchAiResponse,
-            child: const Text('Retry'),
-          ),
-        // Existing Close Button
-        TextButton(
-            child: const Text('Close'),
-            onPressed: () {
-              if (_isSpeaking) {
-                // Ensure speech stops on close if playing
-                _stopSpeaking();
-              }
-              Navigator.of(context).pop();
-            }),
-      ],
-      // ====================================================
-      actionsPadding:
-          const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+        ),
+      ),
     );
-  } // End build
-} // End State class
+  }
+} // End of _TaskNovaHomePageState
