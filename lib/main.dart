@@ -834,69 +834,119 @@ class _TaskNovaHomePageState extends State<TaskNovaHomePage> {
     );
   }
 
-  Future<void> _openTaskDetailDialog(Task task) async {
-    if (!mounted) return; // Check mounted status first
+  // --- Dialog Openers --- (Inside _TaskNovaHomePageState class)
 
-    // Find the task in the current list state
-    final int taskIndex = _tasks.indexWhere((t) => t.id == task.id);
+  // ... (other dialog openers like _showMotivationDialog, _showAiResponseDialog)
+
+  Future<void> _openTaskDetailDialog(Task taskFromListItem) async {
+    // Renamed parameter for clarity
+    if (!mounted) return;
+
+    // Find the task in the current list state using the ID from the list item
+    final int taskIndex = _tasks.indexWhere((t) => t.id == taskFromListItem.id);
     if (taskIndex == -1) {
       _showErrorSnackbar(
           "Error", "Task not found in list. It might have been deleted.");
       return;
     }
 
-    // Prepare categories, handling potential loading errors
-    List<String> categoriesToShow = ['default']; // Start with fallback
-    // bool categoriesLoaded = false; // REMOVED - Unused variable
+    // *** DEBUGGING: Check the task data retrieved from the state list ***
+    final Task taskFromState = _tasks[taskIndex];
+    debugPrint("--- Opening Task Detail Dialog ---");
+    debugPrint(
+        "[_openTaskDetailDialog] Task found in state (_tasks[$taskIndex]):");
+    debugPrint("  ID: ${taskFromState.id}");
+    debugPrint("  Content: '${taskFromState.content}'"); // Check this value!
+    debugPrint("  Category: '${taskFromState.category}'"); // Check this value!
+    debugPrint("  Completed: ${taskFromState.completed}");
+    debugPrint(
+        "  Subtasks: ${taskFromState.completedSubtasks}/${taskFromState.totalSubtasks}");
+    // Add other relevant fields if necessary
+
+    // Prepare categories (handling potential errors as before)
+    List<String> categoriesToShow = ['default'];
     try {
       final fetchedCategories = await _apiService.fetchCategories();
       if (mounted) {
-        // Check mounted *after* await
         categoriesToShow = _prepareCategories(fetchedCategories);
-        // categoriesLoaded = true; // REMOVED - Unused variable
       } else {
-        return; // Don't proceed if widget disposed during category fetch
+        return; // Widget disposed during category fetch
       }
     } catch (e) {
       if (mounted) {
-        // Check mounted *in catch block*
         _showErrorSnackbar("Could not load categories", e);
       }
-      // Continue with default categories, or decide to abort? Let's continue.
+      // Continue with default categories
     }
 
-    // Need to check mounted again before showing the dialog
-    if (!mounted) return;
+    if (!mounted) return; // Check again before showing dialog
+
+    // *** CRITICAL STEP: Create a copy to pass to the dialog ***
+    // *** Assumes Task.copyWith correctly copies ALL fields from taskFromState ***
+    Task taskToSend = Task.copyWith(taskFromState);
+
+    // *** DEBUGGING: Check the task data *after* the copy operation ***
+    debugPrint(
+        "[_openTaskDetailDialog] Task data AFTER Task.copyWith (taskToSend):");
+    debugPrint("  ID: ${taskToSend.id}"); // Should match taskFromState.id
+    debugPrint(
+        "  Content: '${taskToSend.content}'"); // Should match taskFromState.content
+    debugPrint(
+        "  Category: '${taskToSend.category}'"); // Should match taskFromState.category
+    // Add other fields if necessary to compare
 
     // Use the showAnimatedDialog helper
     showAnimatedDialog(
       context: context,
       builder: (dialogContext) => TaskDetailDialog(
-        // Pass the potentially modified task object from the list state
-        // IMPORTANT: Pass a DEEP COPY to prevent modifications in the dialog
-        // from directly affecting the list state until the callback is triggered.
-        task: Task.copyWith(_tasks[taskIndex]),
+        // Pass the copied task
+        task: taskToSend,
         apiService: _apiService,
         categories: categoriesToShow,
         // Callback when the dialog signals a potential update
         onTaskPossiblyUpdated: (updatedTaskData) {
           // Ensure the main page is still mounted when the callback occurs
           if (mounted) {
+            // *** DEBUGGING: Check the data received FROM the dialog ***
+            debugPrint(
+                "[onTaskPossiblyUpdated Callback] Data received from dialog:");
+            debugPrint("  ID: ${updatedTaskData.id}");
+            debugPrint(
+                "  Content: '${updatedTaskData.content}'"); // What content did dialog return?
+            debugPrint(
+                "  Category: '${updatedTaskData.category}'"); // What category did dialog return?
+            debugPrint("  Completed: ${updatedTaskData.completed}");
+            debugPrint(
+                "  Subtasks: ${updatedTaskData.completedSubtasks}/${updatedTaskData.totalSubtasks}");
+
             setState(() {
-              // Find the index again, in case the list changed while dialog was open
+              // Find the index again, as list might have changed
               final currentIndex =
                   _tasks.indexWhere((t) => t.id == updatedTaskData.id);
               if (currentIndex != -1) {
-                // Replace the item in the list with the updated data (using copyWith ensures we don't just reuse the dialog's internal state object)
+                // *** CRITICAL STEP: Update the state list with a copy of the returned data ***
+                // *** Assumes Task.copyWith is correctly implemented ***
                 _tasks[currentIndex] = Task.copyWith(updatedTaskData);
+
+                // *** DEBUGGING: Verify the task in state AFTER update ***
+                debugPrint(
+                    "[onTaskPossiblyUpdated Callback] Task in _tasks[$currentIndex] AFTER update:");
+                debugPrint("  Content: '${_tasks[currentIndex].content}'");
+                debugPrint("  Category: '${_tasks[currentIndex].category}'");
+              } else {
+                debugPrint(
+                    "[onTaskPossiblyUpdated Callback] Warning: Task ID ${updatedTaskData.id} not found in list anymore.");
               }
-              // No need to call _listKey.currentState?....?
-              // setState should be sufficient to rebuild the specific item via _buildAnimatedTaskItem
+              // setState rebuilds the specific list item that changed
             });
+          } else {
+            debugPrint(
+                "[onTaskPossiblyUpdated Callback] Warning: HomePage not mounted when callback received.");
           }
         },
       ),
     );
+    debugPrint("--- Task Detail Dialog Opened ---");
   }
 
   @override

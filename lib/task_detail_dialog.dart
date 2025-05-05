@@ -29,12 +29,42 @@ class _TaskDetailDialogState extends State<TaskDetailDialog> {
   bool _isUpdatingCategory = false;
   late Task _localTask; // Use a local copy for state management
 
+  // In lib/task_detail_dialog.dart -> _TaskDetailDialogState
+
   @override
   void initState() {
     super.initState();
-    _localTask = Task.copyWith(widget.task); // Create a deep copy
+
+    // *** DEBUGGING: Check the data received via widget.task ***
+    debugPrint("[TaskDetailDialog initState] Data received in widget.task:");
+    debugPrint("  ID: ${widget.task.id}");
+    debugPrint(
+        "  Content: '${widget.task.content}'"); // <= Value passed from main.dart
+    debugPrint(
+        "  Category: '${widget.task.category}'"); // <= Value passed from main.dart
+    debugPrint(
+        "  Subtasks: ${widget.task.completedSubtasks}/${widget.task.totalSubtasks}");
+
+    // *** CRITICAL STEP: Create the local copy for the dialog's state ***
+    // *** Assumes Task.copyWith correctly copies ALL fields from widget.task ***
+    _localTask = Task.copyWith(widget.task);
+
+    // *** DEBUGGING: Check the data AFTER the copy operation (_localTask) ***
+    debugPrint(
+        "[TaskDetailDialog initState] Data AFTER Task.copyWith (_localTask):");
+    debugPrint("  ID: ${_localTask.id}");
+    debugPrint(
+        "  Content: '${_localTask.content}'"); // <= Value used by _contentController
+    debugPrint(
+        "  Category: '${_localTask.category}'"); // <= Value used by _selectedCategory
+    debugPrint(
+        "  Subtasks: ${_localTask.completedSubtasks}/${_localTask.totalSubtasks}");
+
+    // Initialize controllers with the copied data
     _contentController = TextEditingController(text: _localTask.content);
     _selectedCategory = _localTask.category;
+
+    debugPrint("--- Task Detail Dialog Initialized ---");
   }
 
   @override
