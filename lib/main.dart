@@ -403,46 +403,68 @@ class _TaskNovaHomePageState extends State<TaskNovaHomePage> {
     FocusScope.of(context).unfocus(); // Dismiss keyboard
 
     // Optional: Show a temporary loading indicator if add takes time
-    // setState(() => _isAddingTask = true);
+    // bool wasLoading = true; // If using indicator
+    // setState(() => _isAddingTask = true); // Set loading state
 
     try {
       final newTask = await _apiService.addTask(taskContent,
           category: taskCategory, parentId: parentId);
 
-      if (mounted) {
-        // Only animate insertion for top-level tasks in this list view
-        if (newTask.parentId == null) {
-          // Update state first
-          _tasks.insert(0, newTask);
-          // Then tell AnimatedList (using the updated list length implicitly)
-          _listKey.currentState?.insertItem(0, duration: _kLongDuration);
-          // If _tasks was already passed to AnimatedList constructor, insertItem is enough
-          // No need for setState wrapping _tasks.insert IF list passed by reference correctly
+      if (!mounted) return; // Check again after await
 
-          // Ensure list view scrolls to the top? (Optional)
-          // Consider _scrollController.animateTo(0, ...)
-        }
+      bool listKeyWasAvailable = false;
 
-        // Clear input only if it wasn't speech input
-        if (content == null) {
-          _taskInputController.clear();
-          // Reset button state if input clearing affects it (already handled by onChanged)
-          if (mounted) {
-            setState(() {});
-          }
+      // Only handle insertion for top-level tasks in this list view
+      if (newTask.parentId == null) {
+        // 1. Modify the data source FIRST
+        _tasks.insert(0, newTask);
+
+        // 2. Inform the AnimatedList WITHOUT wrapping this in setState
+        // Check if the list state is available (important!)
+        if (_listKey.currentState != null) {
+          _listKey.currentState!.insertItem(0, duration: _kLongDuration);
+          debugPrint(
+              "[_addTask] Called AnimatedList.insertItem for task ID ${newTask.id}");
+          listKeyWasAvailable = true; // Animation should have been triggered
+        } else {
+          // List state wasn't ready (e.g., was showing empty/error message)
+          debugPrint(
+              "[_addTask] _listKey.currentState was null. Relying on setState to show the item.");
+          listKeyWasAvailable = false;
         }
-        _showSuccessSnackbar('Task added!');
-        HapticFeedback.lightImpact();
-        _playSuccessSound();
       }
+      // ELSE: If it's a subtask, its state is managed elsewhere (e.g., TaskDetailDialog)
+
+      // 3. Call setState AFTER data modification and potential AnimatedList interaction.
+      // This signals Flutter to rebuild necessary parts of the UI.
+      // It ensures the list reflects the added item, especially if:
+      //    a) The list key was null (list wasn't visible/ready)
+      //    b) Other UI elements depend on the list length or content (though less common here)
+      //    c) To handle the clearing of the text field below consistently.
+      setState(() {
+        // Any other state updates needed after adding can go here.
+        // If you cleared the input *before* setState, the state change might be lost.
+        if (content == null) {
+          // Clear input only if added via text field
+          _taskInputController.clear();
+          debugPrint("[_addTask] Cleared text input controller.");
+        }
+        // _isAddingTask = false; // Reset loading indicator if used
+      });
+
+      // --- Post-Addition UI Feedback (after state is updated) ---
+      _showSuccessSnackbar('Task added!');
+      HapticFeedback.lightImpact();
+      _playSuccessSound(); // Fine to call here, assumed quick/async
     } catch (e) {
-      debugPrint("Add failed: $e");
+      debugPrint("[_addTask] Add Task failed: $e");
+      // if (mounted) setState(() => _isAddingTask = false); // Reset loading on error if used
       if (mounted) {
+        // Check mounted status before showing snackbar
         _showErrorSnackbar("Add failed", e);
       }
-    } finally {
-      // if (mounted) setState(() => _isAddingTask = false);
     }
+    // No finally block needed for loading state if set within setState
   }
 
   Future<void> _toggleTaskCompletion(Task task) async {
@@ -483,24 +505,37 @@ class _TaskNovaHomePageState extends State<TaskNovaHomePage> {
         index >= _tasks.length ||
         _tasks[index].id != taskId) {
       debugPrint(
-          "Delete precondition failed: index=$index, length=${_tasks.length}, taskId=$taskId");
+          "[_deleteTask] Precondition failed: mounted=$mounted, index=$index, length=${_tasks.length}, task.id=${_tasks.length > index && index >= 0 ? _tasks[index].id : 'N/A'}, expectedId=$taskId");
       return; // Precondition failed
     }
 
-    // 1. Get the task to remove for the animation and potential rollback
-    final Task taskToDelete = _tasks[index]; // Keep reference for builder
+    // 1. Get the task to remove for the animation builder and potential rollback
+    final Task taskToDelete = _tasks[index]; // Keep reference
 
-    // 2. Update the state list *first*
+    // 2. Optimistically update the state list *first*
     _tasks.removeAt(index);
 
-    // 3. Tell AnimatedList to remove the item visually
-    _listKey.currentState?.removeItem(
-      index, // Index from which item was removed
-      (context, animation) => _buildRemovedTaskItem(
-          taskToDelete, animation), // Builder for outgoing animation
-      duration: _kMediumDuration,
-    );
+    // 3. Tell AnimatedList to remove the item visually, IF the list key is available
+    bool listKeyWasAvailable = false;
+    if (_listKey.currentState != null) {
+      _listKey.currentState!.removeItem(
+        index, // Index from which item was removed
+        (context, animation) => _buildRemovedTaskItem(
+            taskToDelete, animation), // Builder for outgoing animation
+        duration: _kMediumDuration,
+      );
+      debugPrint(
+          "[_deleteTask] Called AnimatedList.removeItem for task ID ${taskToDelete.id} at index $index.");
+      listKeyWasAvailable = true;
+    } else {
+      debugPrint(
+          "[_deleteTask] _listKey.currentState was null when removing item. Will rely on setState later if API succeeds.");
+      listKeyWasAvailable = false;
+      // No animation, but the data is removed. If API fails, need to setState on rollback.
+      // If API succeeds, need a setState to ensure UI redraws without the item.
+    }
 
+    // Give optimistic feedback *before* API call
     HapticFeedback.lightImpact();
     _showSuccessSnackbar('Task "${taskToDelete.content}" deleted.',
         isDelete: true); // Show confirmation early
@@ -508,16 +543,41 @@ class _TaskNovaHomePageState extends State<TaskNovaHomePage> {
     // 4. Call the API
     try {
       await _apiService.deleteTask(taskId);
-      // Success, nothing more to do visually
+      debugPrint("[_deleteTask] API delete successful for task ID $taskId.");
+
+      // 5. If the animation couldn't run, call setState now to ensure the UI redraws correctly
+      if (!listKeyWasAvailable && mounted) {
+        debugPrint(
+            "[_deleteTask] API success, calling setState because AnimatedList animation couldn't run.");
+        setState(() {});
+      }
+      // If animation DID run, the list is visually correct already, no extra setState needed on success.
     } catch (e) {
-      debugPrint("Delete API failed: $e");
+      debugPrint("[_deleteTask] Delete API failed for task ID $taskId: $e");
       if (mounted) {
-        // 5. Rollback UI on API error
+        // 6. Rollback UI on API error
+        debugPrint(
+            "[_deleteTask] Rolling back deletion for task ID $taskId at index $index.");
         // Insert the original task data back into the list state
         _tasks.insert(index, taskToDelete);
-        // Tell AnimatedList to insert it back *without* animation
-        _listKey.currentState?.insertItem(index, duration: Duration.zero);
-        _showErrorSnackbar("Delete failed", e);
+
+        // Attempt to tell AnimatedList to insert it back visually (instantly)
+        bool rollbackInsertAnimated = false;
+        if (_listKey.currentState != null) {
+          // Note: This might look odd if the user scrolled during the delete attempt.
+          _listKey.currentState!.insertItem(index, duration: Duration.zero);
+          debugPrint(
+              "[_deleteTask] Called AnimatedList.insertItem for rollback.");
+          rollbackInsertAnimated = true;
+        } else {
+          debugPrint(
+              "[_deleteTask] _listKey.currentState was null during rollback insertItem.");
+        }
+
+        // ALWAYS call setState after rollback attempt to guarantee UI consistency,
+        // whether insertItem ran or not.
+        setState(() {});
+        _showErrorSnackbar("Delete failed, restored task", e);
       }
     }
   }
