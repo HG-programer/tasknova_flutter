@@ -412,8 +412,6 @@ class _TaskNovaHomePageState extends State<TaskNovaHomePage> {
 
       if (!mounted) return; // Check again after await
 
-      bool listKeyWasAvailable = false;
-
       // Only handle insertion for top-level tasks in this list view
       if (newTask.parentId == null) {
         // 1. Modify the data source FIRST
@@ -425,12 +423,10 @@ class _TaskNovaHomePageState extends State<TaskNovaHomePage> {
           _listKey.currentState!.insertItem(0, duration: _kLongDuration);
           debugPrint(
               "[_addTask] Called AnimatedList.insertItem for task ID ${newTask.id}");
-          listKeyWasAvailable = true; // Animation should have been triggered
         } else {
           // List state wasn't ready (e.g., was showing empty/error message)
           debugPrint(
               "[_addTask] _listKey.currentState was null. Relying on setState to show the item.");
-          listKeyWasAvailable = false;
         }
       }
       // ELSE: If it's a subtask, its state is managed elsewhere (e.g., TaskDetailDialog)
@@ -562,13 +558,11 @@ class _TaskNovaHomePageState extends State<TaskNovaHomePage> {
         _tasks.insert(index, taskToDelete);
 
         // Attempt to tell AnimatedList to insert it back visually (instantly)
-        bool rollbackInsertAnimated = false;
         if (_listKey.currentState != null) {
           // Note: This might look odd if the user scrolled during the delete attempt.
           _listKey.currentState!.insertItem(index, duration: Duration.zero);
           debugPrint(
               "[_deleteTask] Called AnimatedList.insertItem for rollback.");
-          rollbackInsertAnimated = true;
         } else {
           debugPrint(
               "[_deleteTask] _listKey.currentState was null during rollback insertItem.");
@@ -899,31 +893,20 @@ class _TaskNovaHomePageState extends State<TaskNovaHomePage> {
   // ... (other dialog openers like _showMotivationDialog, _showAiResponseDialog)
 
   Future<void> _openTaskDetailDialog(Task taskFromListItem) async {
-    // Renamed parameter for clarity
     if (!mounted) return;
 
-    // Find the task in the current list state using the ID from the list item
+    // Find the task in the current list state using the ID
     final int taskIndex = _tasks.indexWhere((t) => t.id == taskFromListItem.id);
     if (taskIndex == -1) {
       _showErrorSnackbar(
-          "Error", "Task not found in list. It might have been deleted.");
+          "Error", "Task not found in the list. It might have been deleted.");
       return;
     }
 
-    // *** DEBUGGING: Check the task data retrieved from the state list ***
+    // Retrieve the task from the state
     final Task taskFromState = _tasks[taskIndex];
-    debugPrint("--- Opening Task Detail Dialog ---");
-    debugPrint(
-        "[_openTaskDetailDialog] Task found in state (_tasks[$taskIndex]):");
-    debugPrint("  ID: ${taskFromState.id}");
-    debugPrint("  Content: '${taskFromState.content}'"); // Check this value!
-    debugPrint("  Category: '${taskFromState.category}'"); // Check this value!
-    debugPrint("  Completed: ${taskFromState.completed}");
-    debugPrint(
-        "  Subtasks: ${taskFromState.completedSubtasks}/${taskFromState.totalSubtasks}");
-    // Add other relevant fields if necessary
 
-    // Prepare categories (handling potential errors as before)
+    // Prepare categories
     List<String> categoriesToShow = ['default'];
     try {
       final fetchedCategories = await _apiService.fetchCategories();
@@ -934,79 +917,41 @@ class _TaskNovaHomePageState extends State<TaskNovaHomePage> {
       }
     } catch (e) {
       if (mounted) {
-        _showErrorSnackbar("Could not load categories", e);
+        _showErrorSnackbar("Could not load categories", e.toString());
       }
       // Continue with default categories
     }
 
-    if (!mounted) return; // Check again before showing dialog
+    if (!mounted) return;
 
-    // *** CRITICAL STEP: Create a copy to pass to the dialog ***
-    // *** Assumes Task.copyWith correctly copies ALL fields from taskFromState ***
-    Task taskToSend = Task.copyWith(taskFromState);
-
-    // *** DEBUGGING: Check the task data *after* the copy operation ***
-    debugPrint(
-        "[_openTaskDetailDialog] Task data AFTER Task.copyWith (taskToSend):");
-    debugPrint("  ID: ${taskToSend.id}"); // Should match taskFromState.id
-    debugPrint(
-        "  Content: '${taskToSend.content}'"); // Should match taskFromState.content
-    debugPrint(
-        "  Category: '${taskToSend.category}'"); // Should match taskFromState.category
-    // Add other fields if necessary to compare
-
-    // Use the showAnimatedDialog helper
-    showAnimatedDialog(
+    // Show the TaskDetailDialog
+    showDialog(
       context: context,
       builder: (dialogContext) => TaskDetailDialog(
-        // Pass the copied task
-        task: taskToSend,
+        task: taskFromState,
         apiService: _apiService,
         categories: categoriesToShow,
         // Callback when the dialog signals a potential update
-        onTaskPossiblyUpdated: (updatedTaskData) {
-          // Ensure the main page is still mounted when the callback occurs
+        onTaskPossiblyUpdated: (updatedTask) {
           if (mounted) {
-            // *** DEBUGGING: Check the data received FROM the dialog ***
-            debugPrint(
-                "[onTaskPossiblyUpdated Callback] Data received from dialog:");
-            debugPrint("  ID: ${updatedTaskData.id}");
-            debugPrint(
-                "  Content: '${updatedTaskData.content}'"); // What content did dialog return?
-            debugPrint(
-                "  Category: '${updatedTaskData.category}'"); // What category did dialog return?
-            debugPrint("  Completed: ${updatedTaskData.completed}");
-            debugPrint(
-                "  Subtasks: ${updatedTaskData.completedSubtasks}/${updatedTaskData.totalSubtasks}");
-
             setState(() {
-              // Find the index again, as list might have changed
-              final currentIndex =
-                  _tasks.indexWhere((t) => t.id == updatedTaskData.id);
-              if (currentIndex != -1) {
-                // *** CRITICAL STEP: Update the state list with a copy of the returned data ***
-                // *** Assumes Task.copyWith is correctly implemented ***
-                _tasks[currentIndex] = Task.copyWith(updatedTaskData);
-
-                // *** DEBUGGING: Verify the task in state AFTER update ***
-                debugPrint(
-                    "[onTaskPossiblyUpdated Callback] Task in _tasks[$currentIndex] AFTER update:");
-                debugPrint("  Content: '${_tasks[currentIndex].content}'");
-                debugPrint("  Category: '${_tasks[currentIndex].category}'");
-              } else {
-                debugPrint(
-                    "[onTaskPossiblyUpdated Callback] Warning: Task ID ${updatedTaskData.id} not found in list anymore.");
+              final index = _tasks.indexWhere((t) => t.id == updatedTask.id);
+              if (index != -1) {
+                _tasks[index] = updatedTask;
               }
-              // setState rebuilds the specific list item that changed
             });
-          } else {
-            debugPrint(
-                "[onTaskPossiblyUpdated Callback] Warning: HomePage not mounted when callback received.");
+          }
+        },
+        // Callback when the dialog signals a deletion
+        onTaskDeleted: (taskId) {
+          if (mounted) {
+            setState(() {
+              _tasks.removeWhere((t) => t.id == taskId);
+            });
           }
         },
       ),
     );
-    debugPrint("--- Task Detail Dialog Opened ---");
   }
 
   @override

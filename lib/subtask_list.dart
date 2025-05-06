@@ -155,31 +155,25 @@ class _SubtaskListState extends State<SubtaskList> {
     }
   }
 
-  // --- Open Detail Dialog for a SUBTASK (Recursive!) ---
   void _openSubtaskDetailDialog(Task subtask) {
     final int subtaskIndex =
         widget.parentTask.subtasks.indexWhere((t) => t.id == subtask.id);
     if (subtaskIndex == -1) return;
 
     try {
-      // Log the call for debugging:
-      print("Opening detail dialog for subtask with id: ${subtask.id}");
+      // Inherit categories if available; otherwise use fallback.
       final ancestorDialog =
           context.findAncestorWidgetOfExactType<TaskDetailDialog>();
-      print("Ancestor dialog: $ancestorDialog");
-      // Inherit categories if available; otherwise use fallback.
       final categoriesForSubtask = ancestorDialog?.categories ?? ['default'];
 
       showDialog<void>(
         context: context,
         builder: (dialogContext) {
-          print("Building task detail dialog for subtask...");
           return TaskDetailDialog(
             task: widget.parentTask.subtasks[subtaskIndex],
             apiService: widget.apiService,
             categories: categoriesForSubtask,
             onTaskPossiblyUpdated: (updatedSubtask) {
-              print("Subtask updated: ${updatedSubtask.content}");
               if (mounted) {
                 setState(() {
                   final currentSubtaskIndex = widget.parentTask.subtasks
@@ -190,6 +184,15 @@ class _SubtaskListState extends State<SubtaskList> {
                   }
                 });
                 // Bubble the update to the parent TaskDetailDialog:
+                widget.onTaskUpdated(widget.parentTask);
+              }
+            },
+            onTaskDeleted: (taskId) {
+              if (mounted) {
+                setState(() {
+                  widget.parentTask.subtasks.removeWhere((t) => t.id == taskId);
+                });
+                // Notify the parent TaskDetailDialog about the deletion:
                 widget.onTaskUpdated(widget.parentTask);
               }
             },

@@ -267,6 +267,7 @@ class ApiService {
       final response =
           await http.post(Uri.parse(url)).timeout(_timeoutDuration);
       _handleResponse(response);
+      debugPrint("Task $taskId and associated subtasks deleted successfully.");
     } on TimeoutException {
       debugPrint("Delete task timed out.");
       throw Exception('Request timed out. Please try again.');

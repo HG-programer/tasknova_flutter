@@ -9,12 +9,14 @@ class TaskDetailDialog extends StatefulWidget {
   final ApiService apiService;
   final List<String> categories;
   final Function(Task updatedTask) onTaskPossiblyUpdated;
+  final Function(int taskId) onTaskDeleted; // Callback for task deletion
 
   const TaskDetailDialog({
     required this.task,
     required this.apiService,
     required this.categories,
     required this.onTaskPossiblyUpdated,
+    required this.onTaskDeleted, // Add the callback for deletion
     super.key,
   });
 
@@ -27,6 +29,7 @@ class _TaskDetailDialogState extends State<TaskDetailDialog> {
   late String _selectedCategory;
   bool _isUpdatingContent = false;
   bool _isUpdatingCategory = false;
+  bool _isDeletingTask = false; // Track deletion state
   late Task _localTask; // Use a local copy for state management
 
   @override
@@ -108,6 +111,23 @@ class _TaskDetailDialogState extends State<TaskDetailDialog> {
     }
   }
 
+  Future<void> _deleteTask() async {
+    setState(() => _isDeletingTask = true);
+    try {
+      await widget.apiService
+          .deleteTask(_localTask.id); // Call the API to delete the task
+      widget.onTaskDeleted(
+          _localTask.id); // Notify parent widget about task deletion
+      if (mounted) {
+        Navigator.pop(context); // Close the dialog after deletion
+      }
+    } catch (e) {
+      _showErrorSnackBar('Failed to delete task: $e');
+    } finally {
+      if (mounted) setState(() => _isDeletingTask = false);
+    }
+  }
+
   // Handler for updates coming from SubtaskList
   void _handleSubtaskUpdate(Task updatedParentTaskFromSubtaskList) {
     if (mounted) {
@@ -125,7 +145,8 @@ class _TaskDetailDialogState extends State<TaskDetailDialog> {
     final int completedSubs = _localTask.completedSubtasks;
     final double? progress =
         (totalSubs > 0) ? (completedSubs / totalSubs) : null;
-    bool isUpdating = _isUpdatingContent || _isUpdatingCategory;
+    bool isUpdating =
+        _isUpdatingContent || _isUpdatingCategory || _isDeletingTask;
 
     return AlertDialog(
       scrollable: true,
@@ -223,6 +244,10 @@ class _TaskDetailDialogState extends State<TaskDetailDialog> {
         TextButton(
           onPressed: isUpdating ? null : () => Navigator.pop(context),
           child: const Text('Close'),
+        ),
+        TextButton(
+          onPressed: _isDeletingTask ? null : _deleteTask,
+          child: const Text('Delete Task'),
         ),
       ],
     );

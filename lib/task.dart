@@ -35,7 +35,6 @@ String recurrenceTypeToString(RecurrenceType type) {
     case RecurrenceType.yearly:
       return 'yearly';
     case RecurrenceType.none:
-    default:
       return 'none';
   }
 }
