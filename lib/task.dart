@@ -1,3 +1,4 @@
+// lib/task.dart
 import 'package:flutter/foundation.dart'; // For listEquals and debugPrint
 
 // Enum for Recurrence Types
