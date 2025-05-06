@@ -200,7 +200,6 @@ class _SubtaskListState extends State<SubtaskList> {
         },
       );
     } catch (e) {
-      print("Error opening subtask detail dialog: $e");
       _showError("Error opening subtask details.");
     }
   }
