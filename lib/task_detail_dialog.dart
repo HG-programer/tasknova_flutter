@@ -29,42 +29,16 @@ class _TaskDetailDialogState extends State<TaskDetailDialog> {
   bool _isUpdatingCategory = false;
   late Task _localTask; // Use a local copy for state management
 
-  // In lib/task_detail_dialog.dart -> _TaskDetailDialogState
-
   @override
   void initState() {
     super.initState();
 
-    // *** DEBUGGING: Check the data received via widget.task ***
-    debugPrint("[TaskDetailDialog initState] Data received in widget.task:");
-    debugPrint("  ID: ${widget.task.id}");
-    debugPrint(
-        "  Content: '${widget.task.content}'"); // <= Value passed from main.dart
-    debugPrint(
-        "  Category: '${widget.task.category}'"); // <= Value passed from main.dart
-    debugPrint(
-        "  Subtasks: ${widget.task.completedSubtasks}/${widget.task.totalSubtasks}");
-
-    // *** CRITICAL STEP: Create the local copy for the dialog's state ***
-    // *** Assumes Task.copyWith correctly copies ALL fields from widget.task ***
+    // Create a local copy of the task for state management.
     _localTask = Task.copyWith(widget.task);
 
-    // *** DEBUGGING: Check the data AFTER the copy operation (_localTask) ***
-    debugPrint(
-        "[TaskDetailDialog initState] Data AFTER Task.copyWith (_localTask):");
-    debugPrint("  ID: ${_localTask.id}");
-    debugPrint(
-        "  Content: '${_localTask.content}'"); // <= Value used by _contentController
-    debugPrint(
-        "  Category: '${_localTask.category}'"); // <= Value used by _selectedCategory
-    debugPrint(
-        "  Subtasks: ${_localTask.completedSubtasks}/${_localTask.totalSubtasks}");
-
-    // Initialize controllers with the copied data
+    // Initialize controllers with the copied data.
     _contentController = TextEditingController(text: _localTask.content);
     _selectedCategory = _localTask.category;
-
-    debugPrint("--- Task Detail Dialog Initialized ---");
   }
 
   @override
@@ -116,7 +90,7 @@ class _TaskDetailDialogState extends State<TaskDetailDialog> {
     setState(() {
       _selectedCategory = newCategory;
       _localTask.category = newCategory;
-    }); // Optimistic UI update
+    });
 
     try {
       await widget.apiService.updateTaskCategory(_localTask.id, newCategory);
@@ -124,7 +98,6 @@ class _TaskDetailDialogState extends State<TaskDetailDialog> {
     } catch (e) {
       _showErrorSnackBar('Failed to update category: $e');
       if (mounted) {
-        // Revert on failure
         setState(() {
           _selectedCategory = previousCategory;
           _localTask.category = previousCategory;
@@ -147,12 +120,9 @@ class _TaskDetailDialogState extends State<TaskDetailDialog> {
 
   @override
   Widget build(BuildContext context) {
-    debugPrint(
-        "Build Detail Dialog for Task ${_localTask.id}: Recurrence Type = ${_localTask.recurrenceType}");
     final theme = Theme.of(context);
     final int totalSubs = _localTask.totalSubtasks;
     final int completedSubs = _localTask.completedSubtasks;
-    // Compute progress only if there is at least one subtask.
     final double? progress =
         (totalSubs > 0) ? (completedSubs / totalSubs) : null;
     bool isUpdating = _isUpdatingContent || _isUpdatingCategory;

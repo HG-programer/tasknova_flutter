@@ -1,4 +1,3 @@
-// lib/api_service.dart
 import 'dart:convert';
 import 'dart:async';
 import 'package:flutter/foundation.dart'; // for debugPrint
@@ -6,17 +5,15 @@ import 'package:http/http.dart' as http;
 import 'task.dart'; // Import Task model (ensure it includes RecurrenceType enum and fields)
 
 class ApiService {
-  // Use the base URL you provided
   static const String _baseUrl = 'https://todo-app-ai.onrender.com';
-  // static const String _baseUrl = 'http://10.0.2.2:5000'; // Keep your preferred one active
   static const Duration _timeoutDuration = Duration(seconds: 20);
 
+  // Handles API responses and errors
   dynamic _handleResponse(http.Response response) {
     final statusCode = response.statusCode;
     if (statusCode >= 200 && statusCode < 300) {
-      if (response.body.isEmpty) {
-        return null; // Handle empty successful responses
-      }
+      if (response.body.isEmpty) return null;
+
       try {
         return jsonDecode(response.body);
       } catch (e) {
@@ -27,7 +24,6 @@ class ApiService {
     } else {
       String errorMessage = 'API Request Failed (Status $statusCode)';
       try {
-        // Try to parse backend's specific error message
         final errorBody = jsonDecode(response.body);
         if (errorBody is Map) {
           if (errorBody.containsKey('error')) {
@@ -35,57 +31,51 @@ class ApiService {
           } else if (errorBody.containsKey('message')) {
             errorMessage = errorBody['message'].toString();
           } else if (response.body.isNotEmpty) {
-            errorMessage += ': ${response.body}'; // Fallback to raw body
+            errorMessage += ': ${response.body}';
           }
         } else if (response.body.isNotEmpty) {
           errorMessage += ': ${response.body}';
         }
-      } catch (e) {
-        // JSON decoding of error response failed, use raw body if available
+      } catch (_) {
         if (response.body.isNotEmpty) {
           errorMessage += ': ${response.body}';
         }
       }
-      debugPrint(errorMessage); // Log the error before throwing
+      debugPrint(errorMessage);
       throw Exception(errorMessage);
     }
   }
 
+  // Fetches all tasks, optionally filtered by category
   Future<List<Task>> fetchTasks({String? category}) async {
     String url = '$_baseUrl/tasks';
     if (category != null && category != 'default') {
       url += '?category=${Uri.encodeComponent(category)}';
     }
-    debugPrint("Fetching tasks from: $url"); // Log request
+    debugPrint("Fetching tasks from: $url");
     try {
       final response = await http.get(Uri.parse(url)).timeout(_timeoutDuration);
       final List<dynamic> body = _handleResponse(response);
-      // Use Task.fromJson which should now handle recurrence fields
-      List<Task> tasks = body
+      return body
           .map((dynamic item) => Task.fromJson(item as Map<String, dynamic>))
           .toList();
-      debugPrint("Fetched ${tasks.length} tasks successfully.");
-      return tasks;
     } on TimeoutException {
       debugPrint("Fetch tasks timed out.");
       throw Exception('Request timed out. Please try again.');
     } catch (e) {
       debugPrint("Fetch tasks error: $e");
-      rethrow; // Let UI handle the specific error
+      rethrow;
     }
   }
 
+  // Fetches all available categories
   Future<List<String>> fetchCategories() async {
     String url = '$_baseUrl/categories';
     debugPrint("Fetching categories from: $url");
     try {
       final response = await http.get(Uri.parse(url)).timeout(_timeoutDuration);
       final List<dynamic> body = _handleResponse(response);
-      // Ensure items are strings and get unique values
-      List<String> categories =
-          body.map((dynamic item) => item.toString()).toSet().toList();
-      debugPrint("Fetched categories: $categories");
-      return categories;
+      return body.map((dynamic item) => item.toString()).toSet().toList();
     } on TimeoutException {
       debugPrint("Fetch categories timed out.");
       throw Exception('Request timed out. Please try again.');
@@ -95,11 +85,10 @@ class ApiService {
     }
   }
 
-  // **** MODIFIED: addTask to include recurrence ****
+  // Adds a new task with optional recurrence and category
   Future<Task> addTask(String taskContent,
       {String category = 'default',
       int? parentId,
-      // <<< NEW optional recurrence parameters >>>
       RecurrenceType recurrenceType = RecurrenceType.none,
       DateTime? startDate}) async {
     String url = '$_baseUrl/add';
@@ -110,98 +99,75 @@ class ApiService {
           .post(
             Uri.parse(url),
             headers: {'Content-Type': 'application/json; charset=UTF-8'},
-            // <<< SEND NEW FIELDS IN BODY >>>
             body: jsonEncode({
               'content': taskContent,
               'category': category,
               'parent_id': parentId,
-              // Ensure strings match what backend expects (e.g., 'daily', 'weekly')
               'recurrence_type': recurrenceTypeToString(recurrenceType),
-              // Send date as ISO 8601 string or null
               'start_date': startDate?.toIso8601String(),
             }),
           )
           .timeout(_timeoutDuration);
 
-      // Expect the backend to return the created task data (including new fields)
       if (response.statusCode == 201 || response.statusCode == 200) {
-        // 201 Created is typical REST
         final responseData = _handleResponse(response);
-        // Backend might wrap the task in a 'task' key or return it directly
         final taskData =
             (responseData is Map && responseData.containsKey('task'))
                 ? responseData['task']
                 : responseData;
-        if (taskData is Map<String, dynamic>) {
-          debugPrint("Task added successfully, parsing response.");
-          return Task.fromJson(
-              taskData); // Task.fromJson handles the new fields
-        } else {
-          debugPrint("Add task Error: Invalid response format.");
-          throw Exception('Invalid response format after adding task.');
-        }
+        return Task.fromJson(taskData as Map<String, dynamic>);
       } else {
-        debugPrint(
-            "Add task Error: Unexpected status code ${response.statusCode}.");
-        // Let _handleResponse throw the appropriate error based on status/body
         _handleResponse(response);
-        // This line likely won't be reached if _handleResponse throws, but added for clarity
         throw Exception('Failed to add task (Status ${response.statusCode})');
       }
     } on TimeoutException {
       debugPrint("Add task timed out.");
       throw Exception('Request timed out. Please try again.');
     } catch (e) {
-      // Don't just print here, rethrow so UI can catch it
       debugPrint("Add task error: $e");
       rethrow;
     }
   }
 
-  // **** MODIFIED: addSubtask can now potentially forward recurrence ****
-  // Note: You might decide subtasks don't need recurrence, but the capability is here.
+  // Adds a subtask to an existing parent task
   Future<Task> addSubtask(int parentId, String content,
       {RecurrenceType recurrenceType = RecurrenceType.none,
       DateTime? startDate}) async {
     debugPrint("Adding subtask under parent $parentId");
-    // Simply call the main addTask, passing the recurrence info if provided
     return addTask(content,
         parentId: parentId,
         recurrenceType: recurrenceType,
         startDate: startDate);
   }
 
+  // Updates the completion status of a task
   Future<bool> updateTaskCompletion(int taskId, bool newCompletedStatus) async {
     String url = '$_baseUrl/complete/$taskId';
     debugPrint("Updating completion for task $taskId to $newCompletedStatus");
     try {
       final response = await http.post(
         Uri.parse(url),
-        // Backend likely doesn't need body, just uses URL param and maybe auth
         headers: {'Content-Type': 'application/json; charset=UTF-8'},
       ).timeout(_timeoutDuration);
       final data = _handleResponse(response);
-      // Ensure backend response matches expected structure
       if (data is Map && data.containsKey('completed_status')) {
-        final status = data['completed_status'];
-        if (status is bool) {
-          debugPrint("Task $taskId completion updated to $status.");
-          return status;
-        } else {
-          throw Exception('Invalid "completed_status" type in response.');
-        }
+        return data['completed_status'] as bool;
       } else {
-        throw Exception('Invalid response format after toggling completion.');
+        throw Exception('Invalid response format for completion update.');
       }
     } on TimeoutException {
-      debugPrint("Update completion timed out for task $taskId.");
+      debugPrint("Update completion timed out.");
       throw Exception('Request timed out. Please try again.');
     } catch (e) {
-      debugPrint("Update completion error for task $taskId: $e");
+      debugPrint("Update completion error: $e");
       rethrow;
     }
   }
 
+  // Updates the category of a task
+  // Updates the content of a task
+  // Updates the category of a task
+// Updates the category of a task
   Future<bool> updateTaskContent(int taskId, String newContent) async {
     String url = '$_baseUrl/update-content/$taskId';
     debugPrint("Updating content for task $taskId to '$newContent'");
@@ -223,6 +189,7 @@ class ApiService {
     }
   }
 
+  // Updates the category of a task
   Future<bool> updateTaskCategory(int taskId, String newCategory) async {
     String url = '$_baseUrl/update-category/$taskId';
     debugPrint("Updating category for task $taskId to '$newCategory'");
@@ -244,79 +211,7 @@ class ApiService {
     }
   }
 
-  // **** NEW: Method to Update Recurrence ****
-  // Assumes backend has endpoint like POST /update-recurrence/:id
-  Future<bool> updateTaskRecurrence(int taskId,
-      RecurrenceType newRecurrenceType, DateTime? newStartDate) async {
-    String url = '$_baseUrl/update-recurrence/$taskId';
-    debugPrint(
-        "Updating recurrence for task $taskId: type=${recurrenceTypeToString(newRecurrenceType)}, start=$newStartDate");
-    try {
-      final response = await http
-          .post(Uri.parse(url),
-              headers: {'Content-Type': 'application/json; charset=UTF-8'},
-              body: jsonEncode({
-                'recurrence_type': recurrenceTypeToString(
-                    newRecurrenceType), // Convert enum to string for backend
-                'start_date':
-                    newStartDate?.toIso8601String() // Send date string or null
-              }))
-          .timeout(_timeoutDuration);
-      _handleResponse(response); // Checks for non-2xx status codes
-      debugPrint("Task $taskId recurrence updated successfully.");
-      return true; // Assume success if no exception is thrown
-    } on TimeoutException {
-      debugPrint("Update recurrence timed out for task $taskId.");
-      throw Exception('Request timed out. Please try again.');
-    } catch (e) {
-      debugPrint("Update recurrence error for task $taskId: $e");
-      rethrow; // Re-throw the exception to be caught by the UI layer
-    }
-  }
-
-  Future<void> deleteTask(int taskId) async {
-    String url = '$_baseUrl/delete/$taskId';
-    debugPrint("Deleting task $taskId");
-    try {
-      final response = await http
-          .post(
-            Uri.parse(url),
-            // Depending on backend, might just need POST or might need DELETE method
-            // headers: {'Content-Type': 'application/json; charset=UTF-8'} // Often not needed for delete
-          )
-          .timeout(_timeoutDuration);
-      _handleResponse(response); // Throws on non-2xx
-      debugPrint("Task $taskId deleted successfully.");
-    } on TimeoutException {
-      debugPrint("Delete task timed out for task $taskId.");
-      throw Exception('Request timed out. Please try again.');
-    } catch (e) {
-      debugPrint("Delete task error for task $taskId: $e");
-      rethrow;
-    }
-  }
-
-  Future<List<Task>> fetchSubtasks(int parentId) async {
-    // Assumes backend provides this endpoint
-    String url = '$_baseUrl/subtasks/$parentId';
-    debugPrint("Fetching subtasks for parent $parentId from: $url");
-    try {
-      final response = await http.get(Uri.parse(url)).timeout(_timeoutDuration);
-      final List<dynamic> body = _handleResponse(response);
-      List<Task> subtasks = body
-          .map((dynamic item) => Task.fromJson(item as Map<String, dynamic>))
-          .toList();
-      debugPrint("Fetched ${subtasks.length} subtasks for parent $parentId.");
-      return subtasks;
-    } on TimeoutException {
-      debugPrint("Fetch subtasks timed out for parent $parentId.");
-      throw Exception('Request timed out. Please try again.');
-    } catch (e) {
-      debugPrint("Fetch subtasks error for parent $parentId: $e");
-      rethrow;
-    }
-  }
-
+  // Interacts with AI to get task-related suggestions
   Future<String> askAI(String taskText) async {
     String url = '$_baseUrl/ask-ai';
     debugPrint("Asking AI about task: '$taskText'");
@@ -328,11 +223,8 @@ class ApiService {
           .timeout(_timeoutDuration);
       final data = _handleResponse(response);
       if (data is Map && data.containsKey('details')) {
-        final details = data['details'] as String? ?? "No details provided.";
-        debugPrint("AI response received.");
-        return details;
+        return data['details'] as String? ?? "No details provided.";
       } else {
-        debugPrint("AI Error: Invalid response format.");
         throw Exception('Invalid response format from AI.');
       }
     } on TimeoutException {
@@ -344,29 +236,61 @@ class ApiService {
     }
   }
 
+  // Fetches motivational quotes
   Future<String> getMotivation() async {
     String url = '$_baseUrl/motivate-me';
     debugPrint("Requesting motivation.");
     try {
       final response = await http.post(Uri.parse(url), headers: {
         'Content-Type': 'application/json; charset=UTF-8'
-      } // Backend might not need this header
-          ).timeout(_timeoutDuration);
+      }).timeout(_timeoutDuration);
       final data = _handleResponse(response);
       if (data is Map && data.containsKey('motivation')) {
-        final quote =
-            data['motivation'] as String? ?? "Keep up the great work!";
-        debugPrint("Motivation received.");
-        return quote;
+        return data['motivation'] as String? ?? "Keep up the great work!";
       } else {
-        debugPrint("Motivation Error: Invalid response format.");
-        throw Exception('Invalid response format from motivate-me.');
+        throw Exception('Invalid response format for motivation.');
       }
     } on TimeoutException {
       debugPrint("Get motivation timed out.");
       throw Exception('Request timed out. Please try again.');
     } catch (e) {
       debugPrint("Get motivation error: $e");
+      rethrow;
+    }
+  }
+
+  // Deletes a task
+  Future<void> deleteTask(int taskId) async {
+    String url = '$_baseUrl/delete/$taskId';
+    debugPrint("Deleting task $taskId");
+    try {
+      final response =
+          await http.post(Uri.parse(url)).timeout(_timeoutDuration);
+      _handleResponse(response);
+    } on TimeoutException {
+      debugPrint("Delete task timed out.");
+      throw Exception('Request timed out. Please try again.');
+    } catch (e) {
+      debugPrint("Delete task error: $e");
+      rethrow;
+    }
+  }
+
+  // Fetches subtasks for a parent task
+  Future<List<Task>> fetchSubtasks(int parentId) async {
+    String url = '$_baseUrl/subtasks/$parentId';
+    debugPrint("Fetching subtasks for parent $parentId");
+    try {
+      final response = await http.get(Uri.parse(url)).timeout(_timeoutDuration);
+      final List<dynamic> body = _handleResponse(response);
+      return body
+          .map((dynamic item) => Task.fromJson(item as Map<String, dynamic>))
+          .toList();
+    } on TimeoutException {
+      debugPrint("Fetch subtasks timed out.");
+      throw Exception('Request timed out. Please try again.');
+    } catch (e) {
+      debugPrint("Fetch subtasks error: $e");
       rethrow;
     }
   }
