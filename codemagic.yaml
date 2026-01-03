@@ -5,18 +5,9 @@ workflows:
     max_build_duration: 120
     environment:
       flutter: stable
-      xcode: latest
-      cocoapods: default
     triggering:
       events:
         - push
-        - pull_request
-      branch:
-        patterns:
-          - pattern: 'refactored-constants'
-            include: true
-          - pattern: main
-            include: false
     scripts:
       - name: Get Flutter dependencies
         script: |
@@ -26,6 +17,3 @@ workflows:
           flutter build apk --release
     artifacts:
       - build/app/outputs/flutter-apk/app-release.apk
-    publishing:
-      email:
-        enabled: false
