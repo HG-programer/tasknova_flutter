@@ -35,7 +35,7 @@ android {
     defaultConfig {
         applicationId = "com.example.tasknova_flutter"
         minSdk = flutter.minSdkVersion  // 🔹 Updated minimum SDK based on Flutter 3.29.2 recommendations
-        targetSdk = 34  // 🔹 Updated target SDK version
+        targetSdk = 36  // 🔹 Updated target SDK version to match compileSdk
         versionCode = flutterVersionCode
         versionName = flutterVersionName
     }
