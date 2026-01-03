@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 // *** CORRECTED Import Paths ***
 import '../api_service.dart'; // Use '../' to go up one level from 'dialogs' to 'lib'
+import '../constants.dart';
 // import '../task.dart'; // Not actually needed directly by AiDialogContent itself
 
 // Enum for TTS state
@@ -31,11 +32,6 @@ class _AiDialogContentState extends State<AiDialogContent> {
   late FlutterTts flutterTts;
   bool _isTtsInitialized = false;
   TtsState _ttsState = TtsState.stopped;
-
-  // Static constants for styling
-  static const EdgeInsets _kDialogActionsPadding =
-      EdgeInsets.symmetric(horizontal: 16, vertical: 8);
-  static const Duration _kMediumDuration = Duration(milliseconds: 300);
 
   @override
   void initState() {
@@ -189,7 +185,7 @@ class _AiDialogContentState extends State<AiDialogContent> {
           constraints: const BoxConstraints(
               minHeight: 100, minWidth: 280, maxWidth: 400),
           child: AnimatedSwitcher(
-            duration: _kMediumDuration,
+            duration: AppDurations.dialogAnimation,
             child: _isDialogLoading
                 ? _keyCenteredProgress()
                 : _aiError != null
@@ -219,7 +215,7 @@ class _AiDialogContentState extends State<AiDialogContent> {
             child: const Text('Close'),
             onPressed: () => Navigator.of(context).pop()),
       ],
-      actionsPadding: _kDialogActionsPadding,
+      actionsPadding: AppPadding.dialogActions,
     );
   }
 

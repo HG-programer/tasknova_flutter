@@ -28,13 +28,13 @@ val flutterVersionCode: Int = getLocalProperty("flutter.versionCode", project).t
 val flutterVersionName: String = getLocalProperty("flutter.versionName", project).ifEmpty { "1.0" }
 
 android {
-    compileSdk = 35
+    compileSdk = 36
     namespace = "com.example.tasknova_flutter"
     ndkVersion = "27.0.12077973"  // ⚡ Keep your required NDK version
 
     defaultConfig {
         applicationId = "com.example.tasknova_flutter"
-        minSdk = 23  // 🔹 Updated minimum SDK based on Flutter 3.29.2 recommendations
+        minSdk = flutter.minSdkVersion  // 🔹 Updated minimum SDK based on Flutter 3.29.2 recommendations
         targetSdk = 34  // 🔹 Updated target SDK version
         versionCode = flutterVersionCode
         versionName = flutterVersionName

@@ -2,11 +2,7 @@
 
 import 'package:flutter/material.dart';
 import '../api_service.dart'; // Adjust path if your api_service.dart is elsewhere
-
-// Constants from main.dart (if needed, or define locally)
-const Duration _kMediumDuration = Duration(milliseconds: 300);
-const EdgeInsets _kDialogActionsPadding =
-    EdgeInsets.symmetric(horizontal: 16, vertical: 8);
+import '../constants.dart';
 
 // *** Ensure the class name is EXACTLY this and PUBLIC (no underscore) ***
 class MotivationDialogContent extends StatefulWidget {
@@ -78,7 +74,7 @@ class _MotivationDialogContentState extends State<MotivationDialogContent> {
             const BoxConstraints(minHeight: 80, minWidth: 250, maxWidth: 400),
         alignment: Alignment.center,
         child: AnimatedSwitcher(
-          duration: _kMediumDuration,
+          duration: AppDurations.dialogAnimation,
           child: _isLoading
               ? _keyCenteredProgress()
               : _error != null
@@ -105,7 +101,7 @@ class _MotivationDialogContentState extends State<MotivationDialogContent> {
       actionsAlignment: _error != null
           ? MainAxisAlignment.spaceBetween
           : MainAxisAlignment.end,
-      actionsPadding: _kDialogActionsPadding,
+      actionsPadding: AppPadding.dialogActions,
     );
   }
 

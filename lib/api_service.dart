@@ -3,15 +3,13 @@ import 'dart:async';
 import 'package:flutter/foundation.dart'; // for debugPrint
 import 'package:http/http.dart' as http;
 import 'task.dart'; // Import Task model (ensure it includes RecurrenceType enum and fields)
+import 'constants.dart';
 
 class ApiService {
-  static const String _baseUrl = 'https://todo-app-ai.onrender.com';
-  static const Duration _timeoutDuration = Duration(seconds: 20);
-
   // Handles API responses and errors
   dynamic _handleResponse(http.Response response) {
     final statusCode = response.statusCode;
-    if (statusCode >= 200 && statusCode < 300) {
+    if (statusCode >= ApiConstants.successStartCode && statusCode < ApiConstants.successEndCode) {
       if (response.body.isEmpty) return null;
 
       try {
@@ -19,7 +17,7 @@ class ApiService {
       } catch (e) {
         debugPrint("JSON Decode Error: ${e.toString()}");
         debugPrint("Response Body: ${response.body}");
-        throw Exception('Failed to decode server response.');
+        throw Exception(AppStrings.jsonDecodeError);
       }
     } else {
       String errorMessage = 'API Request Failed (Status $statusCode)';
@@ -48,20 +46,20 @@ class ApiService {
 
   // Fetches all tasks, optionally filtered by category
   Future<List<Task>> fetchTasks({String? category}) async {
-    String url = '$_baseUrl/tasks';
-    if (category != null && category != 'default') {
+    String url = '${ApiConstants.baseUrl}/tasks';
+    if (category != null && category != AppDefaults.defaultCategory) {
       url += '?category=${Uri.encodeComponent(category)}';
     }
     debugPrint("Fetching tasks from: $url");
     try {
-      final response = await http.get(Uri.parse(url)).timeout(_timeoutDuration);
+      final response = await http.get(Uri.parse(url)).timeout(ApiConstants.timeoutDuration);
       final List<dynamic> body = _handleResponse(response);
       return body
           .map((dynamic item) => Task.fromJson(item as Map<String, dynamic>))
           .toList();
     } on TimeoutException {
       debugPrint("Fetch tasks timed out.");
-      throw Exception('Request timed out. Please try again.');
+      throw Exception(AppStrings.requestTimeout);
     } catch (e) {
       debugPrint("Fetch tasks error: $e");
       rethrow;
@@ -70,15 +68,15 @@ class ApiService {
 
   // Fetches all available categories
   Future<List<String>> fetchCategories() async {
-    String url = '$_baseUrl/categories';
+    String url = '${ApiConstants.baseUrl}/categories';
     debugPrint("Fetching categories from: $url");
     try {
-      final response = await http.get(Uri.parse(url)).timeout(_timeoutDuration);
+      final response = await http.get(Uri.parse(url)).timeout(ApiConstants.timeoutDuration);
       final List<dynamic> body = _handleResponse(response);
       return body.map((dynamic item) => item.toString()).toSet().toList();
     } on TimeoutException {
       debugPrint("Fetch categories timed out.");
-      throw Exception('Request timed out. Please try again.');
+      throw Exception(AppStrings.requestTimeout);
     } catch (e) {
       debugPrint("Fetch categories error: $e");
       rethrow;
@@ -87,11 +85,11 @@ class ApiService {
 
   // Adds a new task with optional recurrence and category
   Future<Task> addTask(String taskContent,
-      {String category = 'default',
+      {String category = AppDefaults.defaultCategory,
       int? parentId,
       RecurrenceType recurrenceType = RecurrenceType.none,
       DateTime? startDate}) async {
-    String url = '$_baseUrl/add';
+    String url = '${ApiConstants.baseUrl}/add';
     debugPrint(
         "Adding task: '$taskContent', category: $category, parent: $parentId, recurrence: ${recurrenceTypeToString(recurrenceType)}, start: $startDate");
     try {
@@ -107,7 +105,7 @@ class ApiService {
               'start_date': startDate?.toIso8601String(),
             }),
           )
-          .timeout(_timeoutDuration);
+          .timeout(ApiConstants.timeoutDuration);
 
       if (response.statusCode == 201 || response.statusCode == 200) {
         final responseData = _handleResponse(response);
@@ -122,7 +120,7 @@ class ApiService {
       }
     } on TimeoutException {
       debugPrint("Add task timed out.");
-      throw Exception('Request timed out. Please try again.');
+      throw Exception(AppStrings.requestTimeout);
     } catch (e) {
       debugPrint("Add task error: $e");
       rethrow;
@@ -142,13 +140,13 @@ class ApiService {
 
   // Updates the completion status of a task
   Future<bool> updateTaskCompletion(int taskId, bool newCompletedStatus) async {
-    String url = '$_baseUrl/complete/$taskId';
+    String url = '${ApiConstants.baseUrl}/complete/$taskId';
     debugPrint("Updating completion for task $taskId to $newCompletedStatus");
     try {
       final response = await http.post(
         Uri.parse(url),
-        headers: {'Content-Type': 'application/json; charset=UTF-8'},
-      ).timeout(_timeoutDuration);
+        headers: {'Content-Type': ApiConstants.contentTypeJson},
+      ).timeout(ApiConstants.timeoutDuration);
       final data = _handleResponse(response);
       if (data is Map && data.containsKey('completed_status')) {
         return data['completed_status'] as bool;
@@ -157,32 +155,29 @@ class ApiService {
       }
     } on TimeoutException {
       debugPrint("Update completion timed out.");
-      throw Exception('Request timed out. Please try again.');
+      throw Exception(AppStrings.requestTimeout);
     } catch (e) {
       debugPrint("Update completion error: $e");
       rethrow;
     }
   }
 
-  // Updates the category of a task
   // Updates the content of a task
-  // Updates the category of a task
-// Updates the category of a task
   Future<bool> updateTaskContent(int taskId, String newContent) async {
-    String url = '$_baseUrl/update-content/$taskId';
+    String url = '${ApiConstants.baseUrl}/update-content/$taskId';
     debugPrint("Updating content for task $taskId to '$newContent'");
     try {
       final response = await http
           .post(Uri.parse(url),
-              headers: {'Content-Type': 'application/json; charset=UTF-8'},
+              headers: {'Content-Type': ApiConstants.contentTypeJson},
               body: jsonEncode({'content': newContent}))
-          .timeout(_timeoutDuration);
+          .timeout(ApiConstants.timeoutDuration);
       _handleResponse(response); // Throws on non-2xx status
       debugPrint("Task $taskId content updated successfully.");
       return true; // Assume success if no exception
     } on TimeoutException {
       debugPrint("Update content timed out for task $taskId.");
-      throw Exception('Request timed out. Please try again.');
+      throw Exception(AppStrings.requestTimeout);
     } catch (e) {
       debugPrint("Update content error for task $taskId: $e");
       rethrow;
@@ -191,20 +186,20 @@ class ApiService {
 
   // Updates the category of a task
   Future<bool> updateTaskCategory(int taskId, String newCategory) async {
-    String url = '$_baseUrl/update-category/$taskId';
+    String url = '${ApiConstants.baseUrl}/update-category/$taskId';
     debugPrint("Updating category for task $taskId to '$newCategory'");
     try {
       final response = await http
           .post(Uri.parse(url),
-              headers: {'Content-Type': 'application/json; charset=UTF-8'},
+              headers: {'Content-Type': ApiConstants.contentTypeJson},
               body: jsonEncode({'category': newCategory}))
-          .timeout(_timeoutDuration);
+          .timeout(ApiConstants.timeoutDuration);
       _handleResponse(response); // Throws on non-2xx status
       debugPrint("Task $taskId category updated successfully.");
       return true; // Assume success if no exception
     } on TimeoutException {
       debugPrint("Update category timed out for task $taskId.");
-      throw Exception('Request timed out. Please try again.');
+      throw Exception(AppStrings.requestTimeout);
     } catch (e) {
       debugPrint("Update category error for task $taskId: $e");
       rethrow;
@@ -213,23 +208,23 @@ class ApiService {
 
   // Interacts with AI to get task-related suggestions
   Future<String> askAI(String taskText) async {
-    String url = '$_baseUrl/ask-ai';
+    String url = '${ApiConstants.baseUrl}/ask-ai';
     debugPrint("Asking AI about task: '$taskText'");
     try {
       final response = await http
           .post(Uri.parse(url),
-              headers: {'Content-Type': 'application/json; charset=UTF-8'},
+              headers: {'Content-Type': ApiConstants.contentTypeJson},
               body: jsonEncode({'task_text': taskText}))
-          .timeout(_timeoutDuration);
+          .timeout(ApiConstants.timeoutDuration);
       final data = _handleResponse(response);
       if (data is Map && data.containsKey('details')) {
-        return data['details'] as String? ?? "No details provided.";
+        return data['details'] as String? ?? AppDefaults.defaultAiResponse;
       } else {
-        throw Exception('Invalid response format from AI.');
+        throw Exception(AppStrings.invalidResponseFormat);
       }
     } on TimeoutException {
       debugPrint("Ask AI timed out.");
-      throw Exception('Request timed out. Please try again.');
+      throw Exception(AppStrings.requestTimeout);
     } catch (e) {
       debugPrint("Ask AI error: $e");
       rethrow;
@@ -238,21 +233,21 @@ class ApiService {
 
   // Fetches motivational quotes
   Future<String> getMotivation() async {
-    String url = '$_baseUrl/motivate-me';
+    String url = '${ApiConstants.baseUrl}/motivate-me';
     debugPrint("Requesting motivation.");
     try {
       final response = await http.post(Uri.parse(url), headers: {
-        'Content-Type': 'application/json; charset=UTF-8'
-      }).timeout(_timeoutDuration);
+        'Content-Type': ApiConstants.contentTypeJson
+      }).timeout(ApiConstants.timeoutDuration);
       final data = _handleResponse(response);
       if (data is Map && data.containsKey('motivation')) {
-        return data['motivation'] as String? ?? "Keep up the great work!";
+        return data['motivation'] as String? ?? AppDefaults.defaultMotivation;
       } else {
-        throw Exception('Invalid response format for motivation.');
+        throw Exception(AppStrings.invalidResponseFormat);
       }
     } on TimeoutException {
       debugPrint("Get motivation timed out.");
-      throw Exception('Request timed out. Please try again.');
+      throw Exception(AppStrings.requestTimeout);
     } catch (e) {
       debugPrint("Get motivation error: $e");
       rethrow;
@@ -261,16 +256,16 @@ class ApiService {
 
   // Deletes a task
   Future<void> deleteTask(int taskId) async {
-    String url = '$_baseUrl/delete/$taskId';
+    String url = '${ApiConstants.baseUrl}/delete/$taskId';
     debugPrint("Deleting task $taskId");
     try {
       final response =
-          await http.post(Uri.parse(url)).timeout(_timeoutDuration);
+          await http.post(Uri.parse(url)).timeout(ApiConstants.timeoutDuration);
       _handleResponse(response);
       debugPrint("Task $taskId and associated subtasks deleted successfully.");
     } on TimeoutException {
       debugPrint("Delete task timed out.");
-      throw Exception('Request timed out. Please try again.');
+      throw Exception(AppStrings.requestTimeout);
     } catch (e) {
       debugPrint("Delete task error: $e");
       rethrow;
@@ -279,17 +274,17 @@ class ApiService {
 
   // Fetches subtasks for a parent task
   Future<List<Task>> fetchSubtasks(int parentId) async {
-    String url = '$_baseUrl/subtasks/$parentId';
+    String url = '${ApiConstants.baseUrl}/subtasks/$parentId';
     debugPrint("Fetching subtasks for parent $parentId");
     try {
-      final response = await http.get(Uri.parse(url)).timeout(_timeoutDuration);
+      final response = await http.get(Uri.parse(url)).timeout(ApiConstants.timeoutDuration);
       final List<dynamic> body = _handleResponse(response);
       return body
           .map((dynamic item) => Task.fromJson(item as Map<String, dynamic>))
           .toList();
     } on TimeoutException {
       debugPrint("Fetch subtasks timed out.");
-      throw Exception('Request timed out. Please try again.');
+      throw Exception(AppStrings.requestTimeout);
     } catch (e) {
       debugPrint("Fetch subtasks error: $e");
       rethrow;

@@ -15,19 +15,7 @@ import 'api_service.dart';
 import 'task_detail_dialog.dart';
 import 'dialogs/motivation_dialog.dart'; // Needs public MotivationDialogContent
 import 'dialogs/ai_dialog.dart'; // Needs public AiDialogContent
-
-// --- Constants ---
-const Duration _kShortDuration = Duration(milliseconds: 200);
-const Duration _kMediumDuration = Duration(milliseconds: 350);
-const Duration _kLongDuration = Duration(milliseconds: 400);
-const double _kIconSizeSmall = 18.0;
-const double _kIconSizeMedium = 22.0;
-const double _kIconSizeLarge = 32.0;
-const EdgeInsets _kInputRowPadding = EdgeInsets.fromLTRB(16, 16, 16, 8);
-const EdgeInsets _kListItemPadding =
-    EdgeInsets.symmetric(horizontal: 12.0, vertical: 5.0);
-const EdgeInsets _kErrorPadding = EdgeInsets.all(24);
-const EdgeInsets _kEmptyListPadding = EdgeInsets.all(32.0);
+import 'constants.dart';
 
 //==============================================================================
 // Main Application Entry Point & Theme Setup
@@ -38,7 +26,7 @@ Future<void> main() async {
     // Consider deferring AdMob initialization if it causes startup lag
     await MobileAds.instance.initialize();
   } catch (e) {
-    debugPrint("Error initializing AdMob SDK: $e");
+    debugPrint("${AppStrings.initAdmobError}$e");
   }
   runApp(const MyApp());
 }
@@ -63,7 +51,7 @@ class _MyAppState extends State<MyApp> {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'TaskNova',
+      title: AppStrings.appTitle,
       theme: _buildTheme(Brightness.light),
       darkTheme: _buildTheme(Brightness.dark),
       themeMode: _isDarkMode ? ThemeMode.dark : ThemeMode.light,
@@ -121,7 +109,7 @@ class _MyAppState extends State<MyApp> {
         elevation: 1.0,
         centerTitle: true,
       ),
-      cardTheme: CardTheme(
+      cardTheme: CardThemeData(
         elevation: 1.0,
         color: isDark ? Colors.grey[850] : Colors.white,
         shape: RoundedRectangleBorder(
@@ -129,7 +117,7 @@ class _MyAppState extends State<MyApp> {
         ),
         margin: EdgeInsets.zero,
       ),
-      dialogTheme: DialogTheme(
+      dialogTheme: DialogThemeData(
         backgroundColor: isDark ? const Color(0xFF1e1e1e) : Colors.white,
         shape:
             RoundedRectangleBorder(borderRadius: BorderRadius.circular(16.0)),
@@ -180,7 +168,7 @@ class _MyAppState extends State<MyApp> {
       iconTheme: IconThemeData(
         // Guaranteed non-null color provided
         color: iconColor,
-        size: _kIconSizeMedium,
+        size: AppIconSizes.medium,
       ),
       iconButtonTheme: IconButtonThemeData(
         style: IconButton.styleFrom(padding: const EdgeInsets.all(8)),
@@ -420,7 +408,7 @@ class _TaskNovaHomePageState extends State<TaskNovaHomePage> {
         // 2. Inform the AnimatedList WITHOUT wrapping this in setState
         // Check if the list state is available (important!)
         if (_listKey.currentState != null) {
-          _listKey.currentState!.insertItem(0, duration: _kLongDuration);
+          _listKey.currentState!.insertItem(0, duration: AppDurations.long);
           debugPrint(
               "[_addTask] Called AnimatedList.insertItem for task ID ${newTask.id}");
         } else {
@@ -518,7 +506,7 @@ class _TaskNovaHomePageState extends State<TaskNovaHomePage> {
         index, // Index from which item was removed
         (context, animation) => _buildRemovedTaskItem(
             taskToDelete, animation), // Builder for outgoing animation
-        duration: _kMediumDuration,
+        duration: AppDurations.medium,
       );
       debugPrint(
           "[_deleteTask] Called AnimatedList.removeItem for task ID ${taskToDelete.id} at index $index.");
@@ -590,7 +578,7 @@ class _TaskNovaHomePageState extends State<TaskNovaHomePage> {
           parent: animation,
           curve: Curves.easeOutCubic),
       child: Padding(
-        padding: _kListItemPadding,
+        padding: AppPadding.listItem,
         child: Card(
           // Fade the card background as it animates out
           color: theme.cardTheme.color
@@ -798,7 +786,7 @@ class _TaskNovaHomePageState extends State<TaskNovaHomePage> {
     required BuildContext context,
     required Widget Function(BuildContext) builder,
     bool barrierDismissible = true,
-    Duration transitionDuration = _kMediumDuration,
+    Duration transitionDuration = const Duration(milliseconds: 350),
     Curve scaleCurve = Curves.easeOutCubic, // Keep parameters if needed later
     Curve fadeCurve = Curves.easeOutCubic, // Keep parameters if needed later
   }) {
@@ -986,7 +974,7 @@ class _TaskNovaHomePageState extends State<TaskNovaHomePage> {
           Expanded(
             child: AnimatedSwitcher(
               // Animate between states
-              duration: _kMediumDuration,
+              duration: AppDurations.medium,
               child: _isLoading
                   ? const Center(
                       key: ValueKey('loading'),
@@ -1026,7 +1014,7 @@ class _TaskNovaHomePageState extends State<TaskNovaHomePage> {
 
   Widget _buildInputRow(ThemeData theme, bool showClearButton) {
     return Padding(
-      padding: _kInputRowPadding,
+      padding: AppPadding.inputRow,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
@@ -1052,7 +1040,7 @@ class _TaskNovaHomePageState extends State<TaskNovaHomePage> {
                       ? IconButton(
                           icon: const Icon(
                             Icons.clear,
-                            size: _kIconSizeSmall + 2,
+                            size: AppIconSizes.small + 2,
                           ),
                           tooltip: 'Clear Text',
                           // Use theme color directly, theme provides non-null iconTheme
@@ -1079,7 +1067,7 @@ class _TaskNovaHomePageState extends State<TaskNovaHomePage> {
             button: true,
             child: IconButton(
               icon: const Icon(Icons.add_circle),
-              iconSize: _kIconSizeLarge,
+              iconSize: AppIconSizes.large,
               color: theme.colorScheme.primary,
               tooltip: 'Add Task',
               // Disable add button while listening? Makes sense.
@@ -1096,7 +1084,7 @@ class _TaskNovaHomePageState extends State<TaskNovaHomePage> {
             button: true,
             child: IconButton(
               icon: Icon(_isListening ? Icons.mic_off : Icons.mic),
-              iconSize: _kIconSizeLarge,
+              iconSize: AppIconSizes.large,
               color: _isListening
                   ? theme.colorScheme.error
                   : (_isSpeechEnabled
@@ -1123,7 +1111,7 @@ class _TaskNovaHomePageState extends State<TaskNovaHomePage> {
       // Use Center for vertical/horizontal alignment
       key: const ValueKey('error'), // Key for AnimatedSwitcher
       child: Padding(
-        padding: _kErrorPadding,
+        padding: AppPadding.error,
         child: Column(
           mainAxisSize: MainAxisSize.min, // Take only needed vertical space
           mainAxisAlignment:
@@ -1177,7 +1165,7 @@ class _TaskNovaHomePageState extends State<TaskNovaHomePage> {
       return Center(
         key: const ValueKey('empty'),
         child: Padding(
-          padding: _kEmptyListPadding,
+          padding: AppPadding.emptyList,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -1272,7 +1260,7 @@ class _TaskNovaHomePageState extends State<TaskNovaHomePage> {
       child: FadeTransition(
         opacity: CurvedAnimation(parent: animation, curve: Curves.easeInOut),
         child: Padding(
-          padding: _kListItemPadding,
+          padding: AppPadding.listItem,
           child: Card(
             child: InkWell(
               onTap: () => _toggleTaskCompletion(task),
@@ -1323,7 +1311,7 @@ class _TaskNovaHomePageState extends State<TaskNovaHomePage> {
                                           top: 2.0), // Adjust padding/alignment
                                       child: Icon(
                                         Icons.repeat,
-                                        size: _kIconSizeSmall -
+                                        size: AppIconSizes.small -
                                             2, // Make icon smaller
                                         color: theme.hintColor.withAlpha((255 *
                                                 0.8)
@@ -1335,7 +1323,7 @@ class _TaskNovaHomePageState extends State<TaskNovaHomePage> {
                                     child: AnimatedDefaultTextStyle(
                                       style:
                                           textStyle, // Apply calculated style
-                                      duration: _kShortDuration,
+                                      duration: AppDurations.short,
                                       curve: Curves.easeInOut,
                                       child: Text(
                                         task.content,
@@ -1423,12 +1411,12 @@ class _TaskNovaHomePageState extends State<TaskNovaHomePage> {
                             button: true,
                             enabled: !isComplete, // Disable if task complete
                             child: AnimatedOpacity(
-                              duration: _kShortDuration,
+                              duration: AppDurations.short,
                               opacity:
                                   isComplete ? 0.4 : 1.0, // Fade if disabled
                               child: IconButton(
                                 icon: const Icon(Icons.psychology_alt,
-                                    size: _kIconSizeSmall),
+                                    size: AppIconSizes.small),
                                 visualDensity:
                                     VisualDensity.compact, // Make denser
                                 padding:
@@ -1451,7 +1439,7 @@ class _TaskNovaHomePageState extends State<TaskNovaHomePage> {
                             button: true,
                             child: IconButton(
                               icon: const Icon(Icons.delete_outline,
-                                  size: _kIconSizeSmall),
+                                  size: AppIconSizes.small),
                               visualDensity: VisualDensity.compact,
                               padding: const EdgeInsets.all(4),
                               tooltip: 'Delete Task',
@@ -1474,3 +1462,5 @@ class _TaskNovaHomePageState extends State<TaskNovaHomePage> {
     );
   }
 } // End of _TaskNovaHomePageState
+
+
